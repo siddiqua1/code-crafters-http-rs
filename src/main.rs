@@ -13,7 +13,7 @@ fn main() {
         match stream {
             Ok(mut _stream) => {
                 println!("accepted new connection");
-                let response = "HTTP/1,1 200 OK\r\n\r\n".as_bytes();
+                let response = "HTTP/1.1 200 OK\r\n\r\n".as_bytes();
                 match _stream.write(response) {
                     Ok(_bytes_written) => {
                         println!("{} bytes were written to the connection", _bytes_written);
