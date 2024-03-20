@@ -53,10 +53,10 @@ fn parse_request<'a>(read_buffer: &[u8]) -> Vec<u8> {
 
     let path = status_line[1];
     let paths = path.split("/").collect::<Vec<&str>>();
-    println!("{:?}", paths);
+    // println!("{:?}", paths);
     if paths.len() == 2 && paths[1] == "" { return RESPONSE_OK.to_vec(); }
-    if paths.len() == 3 && paths[1] == "echo" {
-        let echo = paths[2];
+    if paths[1] == "echo" {
+        let echo = paths[2..].join("/");
         let response = format!("{}\r\n{}\r\nContent-Length: {}\r\n\r\n{}\r\n",
             "HTTP/1.1 200 OK",
             "Content-Type: text/plain",
@@ -101,4 +101,10 @@ fn request_echo() {
     let response = parse_request(request.as_bytes());
     let expected = "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 3\r\n\r\nabc\r\n";
     assert!(response == expected.as_bytes().to_vec(), "Got: {:?}", String::from_utf8(response).unwrap());
+}
+#[test]
+fn request_echo_2() {
+    let request = "GET /echo/237/yikes-monkey HTTP/1.1\r\n\r\n";
+    let response = parse_request(request.as_bytes());
+    println!("Got: {:?}", String::from_utf8(response).unwrap());
 }
