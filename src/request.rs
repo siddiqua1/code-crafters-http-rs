@@ -23,6 +23,11 @@ pub struct Request<'a> {
     headers: RequestHeaders<'a>,
 }
 
+use crate::file_handler;
+pub struct ServerContext {
+    pub file_handler: file_handler::FileHandler,
+}
+
 impl<'a> Request<'a> {
     pub fn from(read_buffer: &'a [u8]) -> Result<Request<'a>, InvalidRequest> {
         let request = match std::str::from_utf8(read_buffer) {
@@ -74,15 +79,15 @@ impl<'a> Request<'a> {
         });
     }
 
-    pub fn handle_request(&self) -> Result<Vec<u8>, InvalidRequest> {
+    pub fn handle_request(&self, context: &ServerContext) -> Result<Vec<u8>, InvalidRequest> {
         match self.method {
             // can probably use type state pattern here instead but lazy atm
-            HttpMethod::Get => return self.handle_request_get(),
+            HttpMethod::Get => return self.handle_request_get(context),
             // _ => return Err(InvalidRequest),
         }
     }
 
-    fn handle_request_get(&self) -> Result<Vec<u8>, InvalidRequest> {
+    fn handle_request_get(&self, context: &ServerContext) -> Result<Vec<u8>, InvalidRequest> {
         match self.path {
             HttpPath::Root => return Ok(RESPONSE_OK.to_vec()),
             HttpPath::Node(s) => {
@@ -91,6 +96,9 @@ impl<'a> Request<'a> {
                     return Ok(v);
                 }
                 if let Ok(v) = try_user_agent(s, &self.headers) {
+                    return Ok(v);
+                }
+                if let Ok(v) = try_get_file(s, context) {
                     return Ok(v);
                 }
 
@@ -141,4 +149,26 @@ fn try_user_agent(path: &str, headers: &RequestHeaders) -> Result<Vec<u8>, Reque
         agent
     );
     return Ok(response.into_bytes());
+}
+
+fn try_get_file(path: &str, context: &ServerContext) -> Result<Vec<u8>, RequestMismatch> {
+    if &path[0..7] != "/files/" {
+        return Err(RequestMismatch);
+    }
+    let file_name = &path[7..];
+    match context.file_handler.search(file_name) {
+        None => return Err(RequestMismatch),
+        Some(data) => {
+            let response = format!(
+                "{}\r\n{}\r\nContent-Length: {}\r\n\r\n",
+                "HTTP/1.1 200 OK",
+                "Content-Type: application/octet-stream",
+                data.len()
+            );
+            let mut response = response.into_bytes();
+            response.extend(data);
+            response.extend(b"\r\n".to_vec());
+            return Ok(response);
+        }
+    }
 }
