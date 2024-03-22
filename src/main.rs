@@ -85,3 +85,11 @@ fn request_parse_headers() {
     let response = parse_request(request.as_bytes());
     assert!(response == expected.as_bytes().to_vec(), "Got: {:?}", String::from_utf8(response).unwrap());
 }
+
+#[test] 
+fn request_parse_headers_bad() {
+    let request = "GET /bad-user-agent HTTP/1.1\r\nHost: localhost:4221\r\nUser-Agent: curl/7.64.1\r\n";
+    let expected = RESPONSE_404;
+    let response = parse_request(request.as_bytes());
+    assert!(response == expected.to_vec(), "Got: {:?}", String::from_utf8(response).unwrap());
+}

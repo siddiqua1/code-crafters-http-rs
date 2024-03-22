@@ -1,5 +1,3 @@
-use anyhow::Error;
-
 pub struct InvalidRequest;
 const RESPONSE_OK: &[u8; 19] = b"HTTP/1.1 200 OK\r\n\r\n";
 pub enum HttpMethod {
@@ -21,7 +19,7 @@ pub struct RequestHeaders<'a> {
 pub struct Request<'a> {
     method: HttpMethod,
     path: HttpPath<'a>,
-    version: Version,
+    _version: Version,
     headers: RequestHeaders<'a>,
 }
 
@@ -71,7 +69,7 @@ impl<'a> Request<'a> {
         return Ok(Request {
             method,
             path,
-            version,
+            _version: version,
             headers,
         });
     }
@@ -80,7 +78,7 @@ impl<'a> Request<'a> {
         match self.method {
             // can probably use type state pattern here instead but lazy atm
             HttpMethod::Get => return self.handle_request_get(),
-            _ => return Err(InvalidRequest),
+            // _ => return Err(InvalidRequest),
         }
     }
 
@@ -95,7 +93,8 @@ impl<'a> Request<'a> {
                 if let Ok(v) = try_user_agent(s, &self.headers) {
                     return Ok(v);
                 }
-                todo!()
+                
+                return Err(InvalidRequest);
             }
         }
     }
