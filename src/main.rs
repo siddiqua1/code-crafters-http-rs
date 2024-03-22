@@ -1,6 +1,12 @@
+#![deny(clippy::implicit_return)]
+#![allow(clippy::needless_return)]
+
 // Uncomment this block to pass the first stage
-use std::{io::{Read, Write}, net::{TcpListener, TcpStream}};
-use anyhow::Error;
+use std::{
+    io::{Read, Write},
+    net::{TcpListener, TcpStream},
+    thread,
+};
 
 mod request;
 
@@ -9,13 +15,15 @@ fn main() {
     println!("Logs from your program will appear here!");
 
     // Uncomment this block to pass the first stage
-    
+
     let listener = TcpListener::bind("127.0.0.1:4221").unwrap();
-    
+
     for stream in listener.incoming() {
         match stream {
             Ok(mut _stream) => {
-                handle_valid_connection(&mut _stream);
+                thread::spawn(move || {
+                    handle_valid_connection(&mut _stream);
+                });
             }
             Err(e) => {
                 println!("error: {}", e);
@@ -49,12 +57,12 @@ fn handle_valid_connection(stream: &mut TcpStream) {
 fn parse_request(read_buffer: &[u8]) -> Vec<u8> {
     let request = match request::Request::from(read_buffer) {
         Err(_e) => return RESPONSE_404.to_vec(),
-        Ok(r) => r
+        Ok(r) => r,
     };
 
     match request.handle_request() {
         Err(_e) => return RESPONSE_404.to_vec(),
-        Ok(resp) => return resp
+        Ok(resp) => return resp,
     }
 }
 
@@ -62,14 +70,23 @@ fn parse_request(read_buffer: &[u8]) -> Vec<u8> {
 fn request_base() {
     let request = "GET / HTTP/1.1\r\n\r\n";
     let response = parse_request(request.as_bytes());
-    assert!(response == RESPONSE_OK.to_vec(), "{}", String::from_utf8(response).unwrap())
+    assert!(
+        response == RESPONSE_OK.to_vec(),
+        "{}",
+        String::from_utf8(response).unwrap()
+    )
 }
 #[test]
 fn request_echo() {
     let request = "GET /echo/abc HTTP/1.1\r\n\r\n";
     let response = parse_request(request.as_bytes());
-    let expected = "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 3\r\n\r\nabc\r\n";
-    assert!(response == expected.as_bytes().to_vec(), "Got: {:?}", String::from_utf8(response).unwrap());
+    let expected =
+        "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 3\r\n\r\nabc\r\n";
+    assert!(
+        response == expected.as_bytes().to_vec(),
+        "Got: {:?}",
+        String::from_utf8(response).unwrap()
+    );
 }
 #[test]
 fn request_echo_2() {
@@ -78,18 +95,28 @@ fn request_echo_2() {
     println!("Got: {:?}", String::from_utf8(response).unwrap());
 }
 
-#[test] 
+#[test]
 fn request_parse_headers() {
     let request = "GET /user-agent HTTP/1.1\r\nHost: localhost:4221\r\nUser-Agent: curl/7.64.1\r\n";
-    let expected = "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 11\r\n\r\ncurl/7.64.1\r\n";
+    let expected =
+        "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 11\r\n\r\ncurl/7.64.1\r\n";
     let response = parse_request(request.as_bytes());
-    assert!(response == expected.as_bytes().to_vec(), "Got: {:?}", String::from_utf8(response).unwrap());
+    assert!(
+        response == expected.as_bytes().to_vec(),
+        "Got: {:?}",
+        String::from_utf8(response).unwrap()
+    );
 }
 
-#[test] 
+#[test]
 fn request_parse_headers_bad() {
-    let request = "GET /bad-user-agent HTTP/1.1\r\nHost: localhost:4221\r\nUser-Agent: curl/7.64.1\r\n";
+    let request =
+        "GET /bad-user-agent HTTP/1.1\r\nHost: localhost:4221\r\nUser-Agent: curl/7.64.1\r\n";
     let expected = RESPONSE_404;
     let response = parse_request(request.as_bytes());
-    assert!(response == expected.to_vec(), "Got: {:?}", String::from_utf8(response).unwrap());
+    assert!(
+        response == expected.to_vec(),
+        "Got: {:?}",
+        String::from_utf8(response).unwrap()
+    );
 }

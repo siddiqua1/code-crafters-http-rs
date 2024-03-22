@@ -31,7 +31,7 @@ impl<'a> Request<'a> {
         };
         let words = request
             .split("\r\n")
-            .map(|line| line.split(" ").collect::<Vec<&str>>())
+            .map(|line| return line.split(' ').collect::<Vec<&str>>())
             .collect::<Vec<Vec<&str>>>();
 
         if words.len() < 2 {
@@ -93,7 +93,7 @@ impl<'a> Request<'a> {
                 if let Ok(v) = try_user_agent(s, &self.headers) {
                     return Ok(v);
                 }
-                
+
                 return Err(InvalidRequest);
             }
         }
@@ -118,7 +118,9 @@ fn try_echo(s: &str) -> Result<Vec<u8>, RequestMismatch> {
 }
 
 fn try_user_agent(path: &str, headers: &RequestHeaders) -> Result<Vec<u8>, RequestMismatch> {
-    if path != "/user-agent" { return Err(RequestMismatch); }
+    if path != "/user-agent" {
+        return Err(RequestMismatch);
+    }
     let mut agent = None;
 
     for (k, v) in &headers.pairs {
@@ -129,7 +131,7 @@ fn try_user_agent(path: &str, headers: &RequestHeaders) -> Result<Vec<u8>, Reque
     }
     let agent = match agent {
         None => return Err(RequestMismatch),
-        Some(a) => a
+        Some(a) => a,
     };
     let response = format!(
         "{}\r\n{}\r\nContent-Length: {}\r\n\r\n{}\r\n",
