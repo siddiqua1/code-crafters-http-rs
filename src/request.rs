@@ -82,7 +82,7 @@ impl<'a> Request<'a> {
             }
         }
         let headers = RequestHeaders { pairs: headers };
-
+        println!("Request body: {body:?}");
         return Ok(Request {
             method,
             path,
@@ -209,6 +209,7 @@ fn try_post_file(
     if &path[0..7] != "/files/" {
         return Err(RequestMismatch);
     }
+
     let body = match body {
         None => return Err(RequestMismatch),
         Some(b) => b,
