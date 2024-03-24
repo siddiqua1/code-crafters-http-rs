@@ -184,3 +184,25 @@ fn request_post_file() {
         String::from_utf8(response).unwrap()
     );
 }
+
+#[test]
+fn request_post_file_2() {
+    let data_write = "Horsey yikes Coo dumpty Monkey vanilla monkey humpty";
+    let request = format!(
+        "{}\r\n{}\r\n{}\r\nContent-Length: {}\r\n{}\r\n\r\n{}\r\n",
+        "POST /files/donkey_dooby_yikes_dumpty HTTP/1.1",
+        "Host: localhost:4221",
+        "User-Agent: Go-http-client/1.1",
+        data_write.len(),
+        "Accept-Encoding: gzip",
+        data_write
+    );
+    let expected = request::RESPONSE_CREATED;
+    let context = get_context();
+    let response = parse_request(request.as_bytes(), &context);
+    assert!(
+        response == expected.to_vec(),
+        "Got: {:?}",
+        String::from_utf8(response).unwrap()
+    );
+}

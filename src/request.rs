@@ -233,14 +233,10 @@ fn try_post_file(
     }
 
     let file_name = &path[7..];
-    match context.file_handler.search(file_name) {
-        None => return Err(RequestMismatch),
-        Some(data) => {
-            let _written = match context.file_handler.write(data, body.as_bytes()) {
-                Err(_) => return Err(RequestMismatch),
-                Ok(b) => b,
-            };
-            return Ok(RESPONSE_CREATED.to_vec());
-        }
-    }
+    let path = context.file_handler.get_path(file_name);
+    let _written = match context.file_handler.write(path, body.as_bytes()) {
+        Err(_) => return Err(RequestMismatch),
+        Ok(b) => b,
+    };
+    return Ok(RESPONSE_CREATED.to_vec());
 }

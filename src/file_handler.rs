@@ -56,4 +56,8 @@ impl FileHandler {
             Err(_e) => return Err(BaseDirectoryNotFound),
         }
     }
+
+    pub fn get_path(&self, name: &str) -> PathBuf {
+        return self.base_dir.join(name);
+    }
 }
