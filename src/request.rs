@@ -1,5 +1,7 @@
 pub struct InvalidRequest;
-const RESPONSE_OK: &[u8; 19] = b"HTTP/1.1 200 OK\r\n\r\n";
+pub const RESPONSE_OK: &[u8; 19] = b"HTTP/1.1 200 OK\r\n\r\n";
+pub const RESPONSE_CREATED: &[u8; 24] = b"HTTP/1.1 201 CREATED\r\n\r\n";
+
 pub enum HttpMethod {
     Get,
     Post,
@@ -11,6 +13,8 @@ pub enum HttpPath<'a> {
 pub enum Version {
     Http1_1,
 }
+
+#[derive(PartialEq, Eq, PartialOrd, Ord)]
 pub struct HeaderKey<'a>(&'a str);
 pub struct HeaderValue<'a>(&'a str);
 pub struct RequestHeaders<'a> {
@@ -22,7 +26,7 @@ pub struct Request<'a> {
     path: HttpPath<'a>,
     _version: Version,
     headers: RequestHeaders<'a>,
-    body: Option<&'a str>,
+    body: Option<String>,
 }
 
 use crate::file_handler;
@@ -66,12 +70,15 @@ impl<'a> Request<'a> {
         // this could probably better but not sure how to break out of map closure
         let mut headers: Vec<(HeaderKey, HeaderValue)> = Vec::new();
         let mut body = None;
+        let mut end_of_headers = false;
 
         for line in req_headers {
             if line.len() == 2 {
                 headers.push((HeaderKey(line[0]), HeaderValue(line[1])));
-            } else if line.len() == 1 && !line[0].is_empty() {
-                body = Some(line[0]);
+            } else if line.len() == 1 {
+                end_of_headers = true;
+            } else if end_of_headers {
+                body = Some(line.join(" "));
             }
         }
         let headers = RequestHeaders { pairs: headers };
@@ -117,7 +124,7 @@ impl<'a> Request<'a> {
         match self.path {
             HttpPath::Root => return Err(InvalidRequest),
             HttpPath::Node(s) => {
-                if let Ok(v) = try_post_file(s, context, &self.body) {
+                if let Ok(v) = try_post_file(s, context, &self.body, &self.headers) {
                     return Ok(v);
                 }
 
@@ -196,31 +203,44 @@ fn try_get_file(path: &str, context: &ServerContext) -> Result<Vec<u8>, RequestM
 fn try_post_file(
     path: &str,
     context: &ServerContext,
-    body: &Option<&str>,
+    body: &Option<String>,
+    headers: &RequestHeaders,
 ) -> Result<Vec<u8>, RequestMismatch> {
     if &path[0..7] != "/files/" {
         return Err(RequestMismatch);
     }
     let body = match body {
         None => return Err(RequestMismatch),
-        Some(b) => *b,
+        Some(b) => b,
     };
+    const DESIRED_KEY: HeaderKey<'_> = HeaderKey("Content-Length:");
+
+    let mut body_len = None;
+    for (k, v) in &headers.pairs {
+        if k == &DESIRED_KEY {
+            body_len = Some(v.0.parse::<usize>())
+        }
+    }
+    let body_len = match body_len {
+        None => return Err(RequestMismatch),
+        Some(u) => match u {
+            Err(_) => return Err(RequestMismatch),
+            Ok(l) => l,
+        },
+    };
+    if body.len() != body_len {
+        return Err(RequestMismatch);
+    }
+
     let file_name = &path[7..];
     match context.file_handler.search(file_name) {
         None => return Err(RequestMismatch),
         Some(data) => {
-            let written = match context.file_handler.write(data, body.as_bytes()) {
+            let _written = match context.file_handler.write(data, body.as_bytes()) {
                 Err(_) => return Err(RequestMismatch),
                 Ok(b) => b,
             };
-            let response = format!(
-                "{}\r\n{}\r\nContent-Length: {}\r\n\r\n",
-                "HTTP/1.1 201 Created", "Content-Type: application/octet-stream", written
-            );
-            let response = response.into_bytes();
-            // response.extend(data);
-            // response.extend(b"\r\n".to_vec());
-            return Ok(response);
+            return Ok(RESPONSE_CREATED.to_vec());
         }
     }
 }

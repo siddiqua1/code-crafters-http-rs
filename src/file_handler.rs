@@ -47,13 +47,13 @@ impl FileHandler {
     }
 
     pub fn write(&self, file: PathBuf, data: &[u8]) -> Result<usize, BaseDirectoryNotFound> {
-        let mut file = match File::open(file) {
+        let mut file = match File::create(file) {
             Err(_) => return Err(BaseDirectoryNotFound),
             Ok(f) => f,
         };
-        match file.write(data) {
-            Ok(bytes) => return Ok(bytes),
-            Err(_) => return Err(BaseDirectoryNotFound),
+        match file.write_all(data) {
+            Ok(()) => return Ok(data.len()),
+            Err(_e) => return Err(BaseDirectoryNotFound),
         }
     }
 }

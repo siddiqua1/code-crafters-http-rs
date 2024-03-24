@@ -153,3 +153,34 @@ fn request_parse_headers_bad() {
         String::from_utf8(response).unwrap()
     );
 }
+
+#[test]
+fn request_post_file_bad() {
+    let request = "POST /files/potato HTTP/1.1\r\n";
+    let expected = RESPONSE_404;
+    let context = get_context();
+    let response = parse_request(request.as_bytes(), &context);
+    assert!(
+        response == expected.to_vec(),
+        "Got: {:?}",
+        String::from_utf8(response).unwrap()
+    );
+}
+
+#[test]
+fn request_post_file() {
+    let data_write = "garbage data to write";
+    let request = format!(
+        "POST /files/potato HTTP/1.1\r\nContent-Length: {}\r\n\r\n{}\r\n",
+        data_write.len(),
+        data_write
+    );
+    let expected = request::RESPONSE_CREATED;
+    let context = get_context();
+    let response = parse_request(request.as_bytes(), &context);
+    assert!(
+        response == expected.to_vec(),
+        "Got: {:?}",
+        String::from_utf8(response).unwrap()
+    );
+}
