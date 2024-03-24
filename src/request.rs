@@ -229,13 +229,16 @@ fn try_post_file(
             Ok(l) => l,
         },
     };
-    if body.len() != body_len {
+    if body.len() < body_len {
         return Err(RequestMismatch);
     }
 
     let file_name = &path[7..];
     let path = context.file_handler.get_path(file_name);
-    let _written = match context.file_handler.write(path, body.as_bytes()) {
+    let _written = match context
+        .file_handler
+        .write(path, &body.as_bytes()[0..body_len])
+    {
         Err(_) => return Err(RequestMismatch),
         Ok(b) => b,
     };
