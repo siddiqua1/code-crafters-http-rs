@@ -1,6 +1,6 @@
 use std::fs::File;
-use std::io::Read;
-use std::path::{Path, PathBuf};
+use std::io::{Read, Write};
+use std::path::PathBuf;
 
 #[derive(Debug)]
 pub struct BaseDirectoryNotFound;
@@ -10,27 +10,15 @@ pub struct FileHandler {
 }
 
 impl FileHandler {
-    pub fn from(path: &str) -> Result<FileHandler, BaseDirectoryNotFound> {
-        let path = Path::new("path");
-        if !path.is_absolute() {
-            return Err(BaseDirectoryNotFound);
-        }
-        return Ok(FileHandler {
-            base_dir: path.into(),
-        });
-    }
-
     pub fn new(path: PathBuf) -> Result<FileHandler, BaseDirectoryNotFound> {
         if !path.is_absolute() {
             return Err(BaseDirectoryNotFound);
         }
-        return Ok(FileHandler {
-            base_dir: path.into(),
-        });
+        return Ok(FileHandler { base_dir: path });
     }
 
-    pub fn search(&self, file: &str) -> Option<Vec<u8>> {
-        let mut bfs: Vec<PathBuf> = vec![self.base_dir.clone().into()];
+    pub fn search(&self, file: &str) -> Option<PathBuf> {
+        let mut bfs: Vec<PathBuf> = vec![self.base_dir.clone()];
 
         while let Some(curr) = bfs.pop() {
             if let Ok(entries) = curr.read_dir() {
@@ -41,20 +29,31 @@ impl FileHandler {
                         continue;
                     }
                     if next.ends_with(file) {
-                        let mut file = match File::open(next) {
-                            Err(_) => return None,
-                            Ok(f) => f,
-                        };
-                        let mut file_buffer: Vec<u8> = Vec::new();
-                        if file.read_to_end(&mut file_buffer).is_err() {
-                            return None;
-                        };
-                        return Some(file_buffer);
+                        return Some(next);
                     }
                 }
             }
         }
 
         return None;
+    }
+
+    pub fn read(&self, file: PathBuf) -> Vec<u8> {
+        let mut file_buffer: Vec<u8> = Vec::new();
+        if let Ok(mut file) = File::open(file) {
+            let _ = file.read_to_end(&mut file_buffer);
+        }
+        return file_buffer;
+    }
+
+    pub fn write(&self, file: PathBuf, data: &[u8]) -> Result<usize, BaseDirectoryNotFound> {
+        let mut file = match File::open(file) {
+            Err(_) => return Err(BaseDirectoryNotFound),
+            Ok(f) => f,
+        };
+        match file.write(data) {
+            Ok(bytes) => return Ok(bytes),
+            Err(_) => return Err(BaseDirectoryNotFound),
+        }
     }
 }

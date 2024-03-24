@@ -2,6 +2,7 @@ pub struct InvalidRequest;
 const RESPONSE_OK: &[u8; 19] = b"HTTP/1.1 200 OK\r\n\r\n";
 pub enum HttpMethod {
     Get,
+    Post,
 }
 pub enum HttpPath<'a> {
     Root,
@@ -21,6 +22,7 @@ pub struct Request<'a> {
     path: HttpPath<'a>,
     _version: Version,
     headers: RequestHeaders<'a>,
+    body: Option<&'a str>,
 }
 
 use crate::file_handler;
@@ -51,6 +53,7 @@ impl<'a> Request<'a> {
 
         let method = match status_line[0] {
             "GET" => HttpMethod::Get,
+            "POST" => HttpMethod::Post,
             _ => return Err(InvalidRequest),
         };
 
@@ -62,12 +65,14 @@ impl<'a> Request<'a> {
         let req_headers = &words[1..];
         // this could probably better but not sure how to break out of map closure
         let mut headers: Vec<(HeaderKey, HeaderValue)> = Vec::new();
+        let mut body = None;
 
         for line in req_headers {
-            if line.len() != 2 {
-                break;
+            if line.len() == 2 {
+                headers.push((HeaderKey(line[0]), HeaderValue(line[1])));
+            } else if line.len() == 1 && !line[0].is_empty() {
+                body = Some(line[0]);
             }
-            headers.push((HeaderKey(line[0]), HeaderValue(line[1])));
         }
         let headers = RequestHeaders { pairs: headers };
 
@@ -76,6 +81,7 @@ impl<'a> Request<'a> {
             path,
             _version: version,
             headers,
+            body,
         });
     }
 
@@ -83,7 +89,7 @@ impl<'a> Request<'a> {
         match self.method {
             // can probably use type state pattern here instead but lazy atm
             HttpMethod::Get => return self.handle_request_get(context),
-            // _ => return Err(InvalidRequest),
+            HttpMethod::Post => return self.handle_request_post(context), // _ => return Err(InvalidRequest),
         }
     }
 
@@ -99,6 +105,19 @@ impl<'a> Request<'a> {
                     return Ok(v);
                 }
                 if let Ok(v) = try_get_file(s, context) {
+                    return Ok(v);
+                }
+
+                return Err(InvalidRequest);
+            }
+        }
+    }
+
+    fn handle_request_post(&self, context: &ServerContext) -> Result<Vec<u8>, InvalidRequest> {
+        match self.path {
+            HttpPath::Root => return Err(InvalidRequest),
+            HttpPath::Node(s) => {
+                if let Ok(v) = try_post_file(s, context, &self.body) {
                     return Ok(v);
                 }
 
@@ -159,6 +178,7 @@ fn try_get_file(path: &str, context: &ServerContext) -> Result<Vec<u8>, RequestM
     match context.file_handler.search(file_name) {
         None => return Err(RequestMismatch),
         Some(data) => {
+            let data = context.file_handler.read(data);
             let response = format!(
                 "{}\r\n{}\r\nContent-Length: {}\r\n\r\n",
                 "HTTP/1.1 200 OK",
@@ -168,6 +188,38 @@ fn try_get_file(path: &str, context: &ServerContext) -> Result<Vec<u8>, RequestM
             let mut response = response.into_bytes();
             response.extend(data);
             response.extend(b"\r\n".to_vec());
+            return Ok(response);
+        }
+    }
+}
+
+fn try_post_file(
+    path: &str,
+    context: &ServerContext,
+    body: &Option<&str>,
+) -> Result<Vec<u8>, RequestMismatch> {
+    if &path[0..7] != "/files/" {
+        return Err(RequestMismatch);
+    }
+    let body = match body {
+        None => return Err(RequestMismatch),
+        Some(b) => *b,
+    };
+    let file_name = &path[7..];
+    match context.file_handler.search(file_name) {
+        None => return Err(RequestMismatch),
+        Some(data) => {
+            let written = match context.file_handler.write(data, body.as_bytes()) {
+                Err(_) => return Err(RequestMismatch),
+                Ok(b) => b,
+            };
+            let response = format!(
+                "{}\r\n{}\r\nContent-Length: {}\r\n\r\n",
+                "HTTP/1.1 201 Created", "Content-Type: application/octet-stream", written
+            );
+            let response = response.into_bytes();
+            // response.extend(data);
+            // response.extend(b"\r\n".to_vec());
             return Ok(response);
         }
     }
