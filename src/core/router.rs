@@ -9,13 +9,13 @@ use std::thread;
 
 use crate::core::request::Request;
 
-pub struct Router {
+pub struct Router<'a> {
     listener: TcpListener,
-    routes: HashSet<Route>,
+    routes: HashSet<Route<'a>>,
     context: ServerContext,
 }
 
-impl Router {
+impl<'a> Router<'a> {
     fn new(addr: &str, context: ServerContext) -> Result<Router> {
         let listener = TcpListener::bind(addr)?;
         return Ok(Router {
@@ -25,8 +25,8 @@ impl Router {
         });
     }
 
-    fn handle(&mut self, path: &str, handler: RouteHandler) -> Result<()> {
-        if !self.routes.insert(Route::new(path, handler)) {
+    fn handle(&mut self, path: &'a str, handler: RouteHandler) -> Result<()> {
+        if !self.routes.insert(Route::new(path, handler)?) {
             return Err(anyhow!(format!("Handler for {} already set!", path)));
         }
         return Ok(());
@@ -65,6 +65,10 @@ impl Router {
     }
 
     pub fn handle_request(&self, request: &Request) -> Vec<u8> {
+        for route in &self.routes {
+            // if route.matches(request.path) {}
+        }
+
         todo!();
     }
 }

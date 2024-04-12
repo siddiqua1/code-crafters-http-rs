@@ -22,11 +22,11 @@ pub struct RequestHeaders<'a> {
 }
 
 pub struct Request<'a> {
-    method: HttpMethod,
-    path: HttpPath<'a>,
-    _version: Version,
-    headers: RequestHeaders<'a>,
-    body: Option<String>,
+    pub method: HttpMethod,
+    pub path: HttpPath<'a>,
+    pub _version: Version,
+    pub headers: RequestHeaders<'a>,
+    pub body: Option<String>,
 }
 
 use crate::core::context::ServerContext;
