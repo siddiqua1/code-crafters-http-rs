@@ -29,10 +29,7 @@ pub struct Request<'a> {
     body: Option<String>,
 }
 
-use crate::file_handler;
-pub struct ServerContext {
-    pub file_handler: file_handler::FileHandler,
-}
+use crate::core::context::ServerContext;
 
 impl<'a> Request<'a> {
     pub fn from(read_buffer: &'a [u8]) -> Result<Request<'a>, InvalidRequest> {
