@@ -1,40 +1,29 @@
 #![deny(clippy::implicit_return)]
 #![allow(clippy::needless_return)]
 
-// Uncomment this block to pass the first stage
-use std::sync::Arc;
-use std::{
-    env,
-    io::{Read, Write},
-    net::{TcpListener, TcpStream},
-    path::PathBuf,
-    thread,
-};
-
-// use crate::{file_handler::FileHandler, request::ServerContext};
-
 mod core;
-// mod file_handler;
-// mod request;
+
+use core::router::Router;
+// Uncomment this block to pass the first stage
+use anyhow::Result;
+use core::context::{get_context, ServerContext};
+use core::request::Request;
+use core::response;
+use core::router::run;
+use std::sync::Arc;
+
+fn home(req: &Request, ctx: &ServerContext) -> Result<Vec<u8>> {
+    return Ok(response::OK.to_vec());
+}
 
 fn main() {
-    // let context = Arc::new(get_context());
+    let addr = "127.0.0.1:4221";
+    let context = get_context();
+    // panic-ing here is fine since invalid router should not be recoverable
+    let mut app = Router::new(addr, context).unwrap();
+    app.handle("/", home).unwrap();
 
-    // let listener = TcpListener::bind("127.0.0.1:4221").unwrap();
-
-    // for stream in listener.incoming() {
-    //     match stream {
-    //         Ok(mut _stream) => {
-    //             let context = Arc::clone(&context);
-    //             thread::spawn(move || {
-    //                 handle_valid_connection(&mut _stream, &context);
-    //             });
-    //         }
-    //         Err(e) => {
-    //             println!("error: {}", e);
-    //         }
-    //     }
-    // }
+    run(app);
 }
 
 // #[allow(dead_code)]
