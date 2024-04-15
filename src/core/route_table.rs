@@ -5,8 +5,9 @@ use itertools::Itertools;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::hash::Hash;
+use std::hash::Hasher;
 
-#[derive(Eq, Hash, Debug)]
+#[derive(Eq, Debug)]
 struct Route {
     path_segments: Vec<Segments>,
     pub handler: RouteHandler, // handler should not matter when comparing routes
@@ -85,6 +86,12 @@ impl std::cmp::PartialEq for Route {
     }
 }
 
+impl Hash for Route {
+    fn hash<H: Hasher>(&self, hasher: &mut H) {
+        self.path_segments.hash(hasher);
+    }
+}
+
 pub struct RouteTable {
     routes: HashSet<Route>,
 }
@@ -118,7 +125,6 @@ mod tests {
     use crate::core::context::ServerContext;
     use crate::core::request::Request;
     use crate::core::route_table::Route;
-    use crate::core::routing::Segments;
     use anyhow::anyhow;
     use anyhow::Result;
 
