@@ -3,14 +3,12 @@
 
 mod core;
 
-use core::router::Router;
-// Uncomment this block to pass the first stage
 use anyhow::Result;
 use core::context::{get_context, ServerContext};
 use core::request::Request;
 use core::response;
-use core::router::run;
-use std::sync::Arc;
+use core::route_table::RouteTable;
+use core::router::Router;
 
 fn home(req: &Request, ctx: &ServerContext) -> Result<Vec<u8>> {
     return Ok(response::OK.to_vec());
@@ -19,11 +17,11 @@ fn home(req: &Request, ctx: &ServerContext) -> Result<Vec<u8>> {
 fn main() {
     let addr = "127.0.0.1:4221";
     let context = get_context();
-    // panic-ing here is fine since invalid router should not be recoverable
-    let mut app = Router::new(addr, context).unwrap();
+    // panic-ing here is fine since an invalid router should not be recoverable
+    let mut app = Router::<RouteTable>::new(addr, context).unwrap();
     app.handle("/", home).unwrap();
 
-    run(app);
+    app.run();
 }
 
 // #[allow(dead_code)]
