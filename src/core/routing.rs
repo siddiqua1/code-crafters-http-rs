@@ -42,6 +42,7 @@ impl Hash for Segments {
     }
 }
 
+#[allow(clippy::non_canonical_partial_ord_impl)]
 impl PartialOrd for Segments {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         return Some(self.cmp(other));
@@ -53,8 +54,8 @@ impl Ord for Segments {
         match (self, other) {
             (Segments::Capture(_), Segments::Capture(_)) => return Ordering::Equal,
             (Segments::Literal(a), Segments::Literal(b)) => return a.cmp(b),
-            (Segments::Capture(_), Segments::Literal(_)) => return Ordering::Less,
-            (Segments::Literal(_), Segments::Capture(_)) => return Ordering::Greater,
+            (Segments::Capture(_), Segments::Literal(_)) => return Ordering::Greater,
+            (Segments::Literal(_), Segments::Capture(_)) => return Ordering::Less,
         }
     }
 }
@@ -176,6 +177,7 @@ impl<Context> Ord for Route<Context> {
     }
 }
 
+#[allow(clippy::non_canonical_partial_ord_impl)]
 impl<Context> PartialOrd for Route<Context> {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         return Some(self.cmp(other));

@@ -24,10 +24,9 @@ impl<Context> Routeable<Context> for RouteTable<Context> {
 
     fn match_route<'a>(&self, path: &'a str) -> Option<(RouteHandler<Context>, Identifiers<'a>)> {
         // need to sort routes so that we try literals first then captures
-
         let sorted_routes = self.routes.iter().sorted().collect_vec();
 
-        for route in &self.routes {
+        for route in sorted_routes {
             if let Some(scope) = route.matches(path) {
                 return Some((route.handler, scope));
             }
