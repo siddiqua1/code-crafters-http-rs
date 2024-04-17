@@ -1,119 +1,35 @@
-use crate::core::routing::{Identifiers, RouteHandler, Routeable, Segments};
+use crate::core::routing::{Identifiers, Route, RouteHandler, Routeable};
 use anyhow::anyhow;
 use anyhow::Result;
 use itertools::Itertools;
-use std::collections::HashMap;
 use std::collections::HashSet;
-use std::hash::Hash;
-use std::hash::Hasher;
 
-#[derive(Eq, Debug)]
-struct Route {
-    path_segments: Vec<Segments>,
-    pub handler: RouteHandler, // handler should not matter when comparing routes
+pub struct RouteTable<Context> {
+    routes: HashSet<Route<Context>>,
 }
 
-fn has_unique_elements<T>(iter: T) -> bool
-where
-    T: IntoIterator,
-    T::Item: Eq + Hash,
-{
-    let mut uniq = HashSet::new();
-    return iter.into_iter().all(move |x| return uniq.insert(x));
-}
-
-impl Route {
-    fn new(path: &'static str, handler: RouteHandler) -> Result<Route> {
-        let path_segments = path
-            .split('/')
-            .map(|s| return Segments::new(s))
-            .collect_vec();
-        if path_segments.iter().any(|e| return e.is_err()) {
-            return Err(anyhow!(
-                "Capture group(s) do not have associated key: {path}"
-            ));
-        }
-        let captured = path_segments.iter().filter_map(|s| match s {
-            Ok(Segments::Capture(x)) => return Some(x),
-            _ => return None,
-        });
-        if !has_unique_elements(captured) {
-            return Err(anyhow!(
-                "Same key used with multiple capture groups: {}",
-                path
-            ));
-        }
-        let path_segments = path_segments
-            .into_iter()
-            .filter_map(|res| match res {
-                Ok(x) => return Some(x),
-                _ => return None,
-            })
-            .collect_vec();
-        return Ok(Route {
-            path_segments,
-            handler,
-        });
-    }
-
-    fn matches<'a>(&self, path: &'a str) -> Option<Identifiers<'a>> {
-        let mut path_values = HashMap::new();
-
-        let path = path.split('/').collect_vec();
-        if path.len() != self.path_segments.len() {
-            return None;
-        }
-        for (segment, p) in self.path_segments.iter().zip(path.iter()) {
-            match segment {
-                Segments::Capture(key) => {
-                    path_values.insert(*key, *p);
-                }
-                Segments::Literal(route) => {
-                    if route != p {
-                        return None;
-                    }
-                }
-            }
-        }
-
-        return Some(Identifiers { path_values });
-    }
-}
-
-impl std::cmp::PartialEq for Route {
-    fn eq(&self, other: &Self) -> bool {
-        return self.path_segments.eq(&other.path_segments);
-    }
-}
-
-impl Hash for Route {
-    fn hash<H: Hasher>(&self, hasher: &mut H) {
-        self.path_segments.hash(hasher);
-    }
-}
-
-pub struct RouteTable {
-    routes: HashSet<Route>,
-}
-
-impl Routeable for RouteTable {
+impl<Context> Routeable<Context> for RouteTable<Context> {
     fn new() -> Self {
         return RouteTable {
             routes: HashSet::new(),
         };
     }
 
-    fn add_route(&mut self, path: &'static str, handler: RouteHandler) -> Result<()> {
+    fn add_route(&mut self, path: &'static str, handler: RouteHandler<Context>) -> Result<()> {
         if !self.routes.insert(Route::new(path, handler)?) {
             return Err(anyhow!(format!("Handler for {} already set!", path)));
         }
         return Ok(());
     }
 
-    fn match_route(&self, path: &str) -> Option<RouteHandler> {
+    fn match_route<'a>(&self, path: &'a str) -> Option<(RouteHandler<Context>, Identifiers<'a>)> {
+        // need to sort routes so that we try literals first then captures
+
+        let sorted_routes = self.routes.iter().sorted().collect_vec();
+
         for route in &self.routes {
             if let Some(scope) = route.matches(path) {
-                return Some(route.handler);
+                return Some((route.handler, scope));
             }
         }
         return None;
@@ -122,94 +38,161 @@ impl Routeable for RouteTable {
 
 #[cfg(test)]
 mod tests {
-    use crate::core::context::ServerContext;
     use crate::core::request::Request;
-    use crate::core::route_table::Route;
-    use anyhow::anyhow;
+    use crate::core::route_table::RouteTable;
+    use crate::core::routing::Identifiers;
+    use crate::core::routing::Routeable;
     use anyhow::Result;
 
-    fn thunk(_req: &Request, _ctx: &ServerContext) -> Result<Vec<u8>> {
-        return Ok(Vec::new());
+    struct PlaceholderContext {}
+
+    fn thunk(_req: &Request, _paths: &Identifiers, _ctx: &PlaceholderContext) -> Result<Vec<u8>> {
+        return Ok(vec![1, 2, 3]);
     }
 
-    fn thunk2(_req: &Request, _ctx: &ServerContext) -> Result<Vec<u8>> {
-        return Err(anyhow!("thunk2"));
+    const RAW_REQUEST: &[u8; 18] = b"GET / HTTP/1.1\r\n\r\n";
+
+    fn adding_new_literal(table: &mut RouteTable<PlaceholderContext>, path: &'static str) {
+        let test_request: Request = Request::from(RAW_REQUEST).unwrap();
+        assert!(table.add_route(path, thunk).is_ok());
+        let out = table.match_route(path);
+        assert!(out.is_some());
+        let (handler, ids) = out.unwrap();
+        let response = handler(&test_request, &ids, &PlaceholderContext {});
+        assert!(response.is_ok());
+        let response = response.unwrap();
+        assert_eq!(response, vec![1, 2, 3]);
+        assert!(ids.path_values.is_empty());
+        // should not be able to overwrite the handler once set
+        assert!(table.add_route(path, thunk).is_err());
     }
 
-    #[test]
-    fn route_same_if_path_same() {
-        let orig = "/some/path/potato";
-        let route = Route::new(orig, thunk);
-        assert!(route.is_ok());
-        let route = route.unwrap();
-
-        let route2 = Route::new(orig, thunk2);
-        assert!(route2.is_ok());
-        let route2 = route2.unwrap();
-
-        assert_eq!(route, route2)
+    fn adding_invalid(table: &mut RouteTable<PlaceholderContext>, path: &'static str) {
+        assert!(table.add_route(path, thunk).is_err());
     }
 
-    #[test]
-    fn route_matches() {
-        let orig = "/some/path/potato";
-        let route = Route::new(orig, thunk);
-        assert!(route.is_ok());
-        let route = route.unwrap();
-        assert!(route.matches(orig).is_some());
-    }
-
-    #[test]
-    fn route_matches_captures() {
-        let orig = "/some/{id}/potato";
-        let route = Route::new(orig, thunk);
-        assert!(route.is_ok());
-        let route = route.unwrap();
-        for id in 0..10 {
-            let path = format!("/some/{}/potato", id);
-            let matches = route.matches(&path);
-            assert!(matches.is_some());
-            let vals = matches.unwrap();
-            let id = id.to_string();
-            assert_eq!(vals.path_values.get("id").unwrap(), &&id);
-        }
+    fn adding_new_wild(table: &mut RouteTable<PlaceholderContext>, path: &'static str) {
+        let test_request: Request = Request::from(RAW_REQUEST).unwrap();
+        assert!(table.add_route(path, thunk).is_ok());
+        let out = table.match_route(path);
+        assert!(out.is_some());
+        let (handler, ids) = out.unwrap();
+        let response = handler(&test_request, &ids, &PlaceholderContext {});
+        assert!(response.is_ok());
+        let response = response.unwrap();
+        assert_eq!(response, vec![1, 2, 3]);
+        assert!(!ids.path_values.is_empty());
+        // should not be able to overwrite the handler once set
+        assert!(table.add_route(path, thunk).is_err());
     }
 
     #[test]
-    fn route_matches_captures_multiple() {
-        let orig = "/some/{id}/potato/{msg}";
-        let route = Route::new(orig, thunk);
-        assert!(route.is_ok());
-        let route = route.unwrap();
-        let id = 1234;
-        let msg = "elegant_message";
-        let path = format!("/some/{}/potato/{}", id, msg);
-        let matches = route.matches(&path);
-        assert!(matches.is_some());
-        let vals = matches.unwrap();
-        let id = id.to_string();
-        assert!(vals.path_values.get("id").is_some());
-        assert!(vals.path_values.get("msg").is_some());
-        assert_eq!(vals.path_values.get("id").unwrap(), &&id);
-        assert_eq!(vals.path_values.get("msg").unwrap(), &msg);
+    fn table_matches_literals() {
+        let mut table = RouteTable::<PlaceholderContext>::new();
+
+        adding_new_literal(&mut table, "/");
+        adding_new_literal(&mut table, "/user");
+        adding_new_literal(&mut table, "/user/"); // checking distinction
     }
 
     #[test]
-    fn route_matches_fails() {
-        let orig = "/some/{id}/potato";
-        let route = Route::new(orig, thunk);
-        assert!(route.is_ok());
-        let route = route.unwrap();
-        let id = 1234;
-        let bad_path = format!("/some/potato/{}", id);
-        let matches = route.matches(&bad_path);
-        assert!(matches.is_none());
+    fn table_no_match_literals_subpath() {
+        let mut table = RouteTable::<PlaceholderContext>::new();
+
+        adding_new_literal(&mut table, "/");
+        adding_new_literal(&mut table, "/user/dashboard");
+        assert!(table.match_route("/user").is_none());
+        assert!(table.match_route("/user/not_dashboard").is_none());
+        assert!(table.match_route("/user/dashboard").is_some());
     }
 
     #[test]
-    fn route_matches_same_var_twice() {
-        let orig = "/some/{id}/potato/{id}";
-        let route = Route::new(orig, thunk);
-        assert!(route.is_err());
+    fn table_no_match_wild_subpath() {
+        let mut table = RouteTable::<PlaceholderContext>::new();
+
+        adding_new_literal(&mut table, "/");
+        adding_new_wild(&mut table, "/user/{id}/dashboard");
+        assert!(table.match_route("/user").is_none());
+        assert!(table.match_route("/user/1234").is_none());
+        assert!(table.match_route("/user/1234/dashboard").is_some());
+    }
+
+    #[test]
+    fn table_matches_wilds() {
+        let mut table = RouteTable::<PlaceholderContext>::new();
+
+        adding_new_literal(&mut table, "/");
+        adding_new_wild(&mut table, "/user/{id}");
+        adding_new_wild(&mut table, "/user/{id}/");
+
+        // should not be able to rebind the wild match
+        adding_invalid(&mut table, "/user/{msg}");
+
+        let path = "/user/1234";
+        let Some((_handler, ids)) = table.match_route(path) else {
+            panic!("Should be valid route");
+        };
+        assert_eq!(ids.path_values.get("id"), Some(&"1234"));
+
+        let path = "/user/1234/";
+        let Some((_handler, ids)) = table.match_route(path) else {
+            panic!("Should be valid route");
+        };
+        assert_eq!(ids.path_values.get("id"), Some(&"1234"));
+    }
+
+    #[test]
+    fn table_matches_literal_over_wild() {
+        let mut table = RouteTable::<PlaceholderContext>::new();
+
+        adding_new_literal(&mut table, "/");
+        adding_new_literal(&mut table, "/user/dashboard");
+        adding_new_wild(&mut table, "/user/{id}");
+
+        // should not be able to rebind the wild match
+        adding_invalid(&mut table, "/user/{msg}");
+
+        let path = "/user/1234";
+        let Some((_handler, ids)) = table.match_route(path) else {
+            panic!("Should be valid route");
+        };
+        assert_eq!(ids.path_values.get("id"), Some(&"1234"));
+
+        let path = "/user/dashboard";
+        let Some((_handler, ids)) = table.match_route(path) else {
+            panic!("Should be valid route");
+        };
+        assert!(ids.path_values.is_empty());
+    }
+
+    #[test]
+    fn table_matches_literal_over_wild_opposite_order() {
+        let mut table = RouteTable::<PlaceholderContext>::new();
+
+        adding_new_literal(&mut table, "/");
+        adding_new_wild(&mut table, "/user/{id}");
+        adding_new_literal(&mut table, "/user/dashboard");
+
+        // should not be able to rebind the wild match
+        adding_invalid(&mut table, "/user/{msg}");
+
+        let path = "/user/1234";
+        let Some((_handler, ids)) = table.match_route(path) else {
+            panic!("Should be valid route");
+        };
+        assert_eq!(ids.path_values.get("id"), Some(&"1234"));
+
+        let path = "/user/dashboard";
+        let Some((_handler, ids)) = table.match_route(path) else {
+            panic!("Should be valid route");
+        };
+        assert!(ids.path_values.is_empty());
+    }
+
+    #[test]
+    fn table_does_not_accept_empty_capture() {
+        let mut table = RouteTable::<PlaceholderContext>::new();
+
+        adding_invalid(&mut table, "/user/{}");
     }
 }

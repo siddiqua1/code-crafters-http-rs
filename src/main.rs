@@ -3,23 +3,27 @@
 
 mod core;
 
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use core::context::{get_context, ServerContext};
-use core::request::Request;
+use core::request::{HttpMethod, Request};
 use core::response;
 use core::route_table::RouteTable;
 use core::router::Router;
+use core::routing::Identifiers;
 
-fn home(req: &Request, ctx: &ServerContext) -> Result<Vec<u8>> {
-    return Ok(response::OK.to_vec());
+fn index(req: &Request, _path_vals: &Identifiers, _ctx: &ServerContext) -> Result<Vec<u8>> {
+    if let HttpMethod::Get = req.method {
+        return Ok(response::OK.to_vec());
+    }
+    return Err(anyhow!("Only GET is supported by index"));
 }
 
 fn main() {
     let addr = "127.0.0.1:4221";
     let context = get_context();
     // panic-ing here is fine since an invalid router should not be recoverable
-    let mut app = Router::<RouteTable>::new(addr, context).unwrap();
-    app.handle("/", home).unwrap();
+    let mut app = Router::<_, RouteTable<_>>::new(addr, context).unwrap();
+    app.handle("/", index).unwrap();
 
     app.run();
 }

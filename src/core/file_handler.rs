@@ -1,3 +1,5 @@
+#![allow(unused)]
+
 use std::fs::File;
 use std::io::{Read, Write};
 use std::path::PathBuf;
@@ -5,6 +7,7 @@ use std::path::PathBuf;
 #[derive(Debug)]
 pub struct BaseDirectoryNotFound;
 
+#[derive(Debug)]
 pub struct FileHandler {
     base_dir: PathBuf,
 }

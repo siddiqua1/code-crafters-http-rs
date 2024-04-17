@@ -2,12 +2,11 @@ use anyhow::anyhow;
 use anyhow::Result;
 use itertools::Itertools;
 use std::collections::HashMap;
-use std::io::empty;
 
 #[derive(PartialEq, Debug)]
 pub enum HttpMethod {
-    GET,
-    POST,
+    Get,
+    Post,
 }
 
 #[derive(PartialEq, Debug)]
@@ -45,8 +44,8 @@ impl<'a> Request<'a> {
         };
 
         let method = match status_line[0] {
-            "GET" => HttpMethod::GET,
-            "POST" => HttpMethod::POST,
+            "GET" => HttpMethod::Get,
+            "POST" => HttpMethod::Post,
             _ => {
                 return Err(anyhow!(
                     "Invalid HTTP verb, only Get and Post are supported at this time"
@@ -129,7 +128,7 @@ mod tests {
         let parsed = Request::from(request.as_bytes());
         assert!(parsed.is_ok());
         let parsed = parsed.unwrap();
-        assert_eq!(parsed.method, HttpMethod::GET);
+        assert_eq!(parsed.method, HttpMethod::Get);
         assert_eq!(parsed.path, path);
         assert_eq!(parsed._version, Version::Http1_1);
         assert!(parsed.headers.is_empty());
@@ -143,7 +142,7 @@ mod tests {
         let parsed = Request::from(request.as_bytes());
         assert!(parsed.is_ok());
         let parsed = parsed.unwrap();
-        assert_eq!(parsed.method, HttpMethod::GET);
+        assert_eq!(parsed.method, HttpMethod::Get);
         assert_eq!(parsed.path, path);
         assert_eq!(parsed._version, Version::Http1_1);
         assert!(parsed.headers.is_empty());
@@ -157,7 +156,7 @@ mod tests {
         let parsed = Request::from(request.as_bytes());
         assert!(parsed.is_ok());
         let parsed = parsed.unwrap();
-        assert_eq!(parsed.method, HttpMethod::POST);
+        assert_eq!(parsed.method, HttpMethod::Post);
         assert_eq!(parsed.path, path);
         assert_eq!(parsed._version, Version::Http1_1);
         assert!(parsed.headers.is_empty());
@@ -174,7 +173,7 @@ mod tests {
         let parsed = Request::from(request.as_bytes());
         assert!(parsed.is_ok());
         let parsed = parsed.unwrap();
-        assert_eq!(parsed.method, HttpMethod::GET);
+        assert_eq!(parsed.method, HttpMethod::Get);
         assert_eq!(parsed.path, path);
         assert_eq!(parsed._version, Version::Http1_1);
         assert!(!parsed.headers.is_empty());
@@ -202,7 +201,7 @@ mod tests {
 
         assert!(parsed.is_ok());
         let parsed = parsed.unwrap();
-        assert_eq!(parsed.method, HttpMethod::POST);
+        assert_eq!(parsed.method, HttpMethod::Post);
         assert_eq!(parsed.path, path);
         assert_eq!(parsed._version, Version::Http1_1);
         assert!(!parsed.headers.is_empty());
