@@ -2,21 +2,13 @@
 #![allow(clippy::needless_return)]
 
 mod core;
+mod example_server;
 
-use anyhow::{anyhow, Result};
-use core::context::{get_context, ServerContext};
-use core::request::{HttpMethod, Request};
-use core::response;
 use core::route_table::RouteTable;
 use core::router::Router;
-use core::routing::Identifiers;
 
-fn index(req: &Request, _path_vals: &Identifiers, _ctx: &ServerContext) -> Result<Vec<u8>> {
-    if let HttpMethod::Get = req.method {
-        return Ok(response::OK.to_vec());
-    }
-    return Err(anyhow!("Only GET is supported by index"));
-}
+use example_server::context::get_context;
+use example_server::routes::index;
 
 fn main() {
     let addr = "127.0.0.1:4221";

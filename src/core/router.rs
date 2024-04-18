@@ -83,19 +83,20 @@ impl<Context: Sync + Send + 'static, T: Routeable<Context> + Sync + Send + 'stat
 
 #[cfg(test)]
 mod tests {
-    use crate::core::context::get_context;
     use crate::core::route_table::RouteTable;
     use crate::core::router::Router;
 
+    struct PlaceholderContext {}
+
     #[test]
     fn router_new_ok() {
-        let app = Router::<_, RouteTable<_>>::new("127.0.0.1:4221", get_context());
+        let app = Router::<_, RouteTable<_>>::new("127.0.0.1:4221", &PlaceholderContext {});
         assert!(app.is_ok());
     }
 
     #[test]
     fn router_new_err() {
-        let app = Router::<_, RouteTable<_>>::new("not valid ip", get_context());
+        let app = Router::<_, RouteTable<_>>::new("not valid ip", &PlaceholderContext {});
         assert!(app.is_err());
     }
 }

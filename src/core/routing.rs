@@ -186,12 +186,14 @@ impl<Context> PartialOrd for Route<Context> {
 
 #[cfg(test)]
 mod tests {
-    use crate::core::context::ServerContext;
     use crate::core::request::Request;
     use crate::core::routing::Route;
     use crate::core::routing::Segments;
     use anyhow::anyhow;
     use anyhow::Result;
+
+    #[derive(Debug)]
+    struct PlaceholderContext {}
 
     use super::Identifiers;
 
@@ -220,11 +222,19 @@ mod tests {
         assert!(segment.is_err())
     }
 
-    fn thunk(_req: &Request, _path_vals: &Identifiers, _ctx: &ServerContext) -> Result<Vec<u8>> {
+    fn thunk(
+        _req: &Request,
+        _path_vals: &Identifiers,
+        _ctx: &PlaceholderContext,
+    ) -> Result<Vec<u8>> {
         return Ok(Vec::new());
     }
 
-    fn thunk2(_req: &Request, _path_vals: &Identifiers, _ctx: &ServerContext) -> Result<Vec<u8>> {
+    fn thunk2(
+        _req: &Request,
+        _path_vals: &Identifiers,
+        _ctx: &PlaceholderContext,
+    ) -> Result<Vec<u8>> {
         return Err(anyhow!("thunk2"));
     }
 

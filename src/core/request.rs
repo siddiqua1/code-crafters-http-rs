@@ -2,6 +2,9 @@ use anyhow::anyhow;
 use anyhow::Result;
 use itertools::Itertools;
 use std::collections::HashMap;
+/***
+ * RFC: https://datatracker.ietf.org/doc/html/rfc9112
+ */
 
 #[derive(PartialEq, Debug)]
 pub enum HttpMethod {
@@ -27,13 +30,14 @@ pub struct Request<'a> {
 
 impl<'a> Request<'a> {
     pub fn from(read_buffer: &'a [u8]) -> Result<Request<'a>> {
-        let request = match std::str::from_utf8(read_buffer) {
-            Err(_) => return Err(anyhow!("Invalid UTF-8 encoding")),
-            Ok(s) => s,
+        let Ok(request) = std::str::from_utf8(read_buffer) else {
+            return Err(anyhow!("Invalid UTF-8 encoding"));
         };
+
         let lines = request.split("\r\n").collect::<Vec<&str>>();
 
-        if lines.len() < 2 {
+        const MINIMUM_EXPECTED_LINES: usize = 2;
+        if lines.len() < MINIMUM_EXPECTED_LINES {
             return Err(anyhow!("Message lines less than expected"));
         }
 
@@ -58,7 +62,8 @@ impl<'a> Request<'a> {
         // from the spec, an empty line seperates the headers and status line from the body
         let mut empty_line = None;
 
-        for (i, line) in lines[1..].iter().enumerate() {
+        const STARTING_BODY_SEARCH_IDX: usize = 1;
+        for (i, line) in lines[STARTING_BODY_SEARCH_IDX..].iter().enumerate() {
             if line.is_empty() {
                 empty_line = Some(i + 1); // since we remove the status line
                 break;
@@ -69,7 +74,6 @@ impl<'a> Request<'a> {
         let mut body = None;
 
         let Some(empty_line) = empty_line else {
-            // no headers, thus no body either
             return Ok(Request {
                 method,
                 path,
@@ -84,7 +88,6 @@ impl<'a> Request<'a> {
         // this could probably better but not sure how to break out of map closure
 
         for header in request_headers {
-            println!("header line: {header}");
             let key_val = header.split(": ").collect_vec();
             if key_val.len() != 2 {
                 return Err(anyhow!("Ill-formatted headers"));
@@ -103,6 +106,9 @@ impl<'a> Request<'a> {
                 return Err(anyhow!(
                     "Content-Length specified, but no body was provided."
                 ));
+            }
+            if n > lines[body_idx].len() {
+                return Err(anyhow!("Content-Length specified is larger than body"));
             }
             body = Some(&lines[body_idx][0..n]);
         }
@@ -133,6 +139,14 @@ mod tests {
         assert_eq!(parsed._version, Version::Http1_1);
         assert!(parsed.headers.is_empty());
         assert_eq!(parsed.body, None);
+    }
+
+    #[test]
+    fn request_err_missing_escapes() {
+        let path = "/";
+        let request = format!("GET {} HTTP/1.1", path);
+        let parsed = Request::from(request.as_bytes());
+        assert!(parsed.is_err());
     }
 
     #[test]
@@ -194,11 +208,6 @@ mod tests {
             data_write
         );
         let parsed = Request::from(request.as_bytes());
-
-        if let Err(e) = &parsed {
-            println!("{}", e);
-        }
-
         assert!(parsed.is_ok());
         let parsed = parsed.unwrap();
         assert_eq!(parsed.method, HttpMethod::Post);
@@ -237,10 +246,79 @@ mod tests {
     }
 
     #[test]
-    fn request_err_invalid_path_with_space() {
-        let path = "super awesome path";
-        let request = format!("GET {} HTTP/9001\r\n\r\n", path);
+    fn request_err_invalid_header_no_split() {
+        let path = "/host";
+        let request = format!("GET {} HTTP/1.1\r\nHost localhost:4221\r\n", path);
         let parsed = Request::from(request.as_bytes());
         assert!(parsed.is_err());
+    }
+
+    #[test]
+    fn request_err_invalid_header_multi_split() {
+        let path = "/host";
+        let request = format!("GET {} HTTP/1.1\r\nHost: localhost: 4221\r\n", path);
+        let parsed = Request::from(request.as_bytes());
+        assert!(parsed.is_err());
+    }
+
+    #[test]
+    fn request_err_content_len_bad() {
+        let path = "/files/potato";
+        let data_write = "garbage data to write";
+        let request = format!(
+            "POST {} HTTP/1.1\r\nContent-Length: {}\r\n\r\n{}\r\n",
+            path, "8912.123", data_write
+        );
+        let parsed = Request::from(request.as_bytes());
+        assert!(parsed.is_err());
+    }
+
+    #[test]
+    fn request_err_content_len_no_content() {
+        let path = "/files/potato";
+        let data_write = "garbage data to write";
+        let request = format!(
+            "POST {} HTTP/1.1\r\nContent-Length: {}\r\n\r\n{}\r\n",
+            path,
+            data_write.len(),
+            ""
+        );
+        let parsed = Request::from(request.as_bytes());
+        assert!(parsed.is_err());
+    }
+
+    #[test]
+    fn request_err_content_len_no_body() {
+        let path = "/files/potato";
+        let data_write = "garbage data to write";
+        let request = format!(
+            "POST {} HTTP/1.1\r\nContent-Length: {}\r\n",
+            path,
+            data_write.len()
+        );
+        let parsed = Request::from(request.as_bytes());
+        assert!(parsed.is_err());
+    }
+
+    #[test]
+    fn request_err_invalid_path_with_space() {
+        let path = "super awesome path";
+        let request = format!("GET {} HTTP/1.1\r\n\r\n", path);
+        let parsed = Request::from(request.as_bytes());
+        assert!(parsed.is_err());
+    }
+
+    #[test]
+    fn request_buffer_invalid_utf8() {
+        // from https://stackoverflow.com/questions/1301402/example-invalid-utf8-string
+        const OCTET_2: &[u8; 2] = b"\xc3\x28";
+        const OCTET_3: &[u8; 3] = b"\xe2\x28\xa1";
+        const OCTET_4: &[u8; 4] = b"\xe2\x28\xa1\xbc";
+        const OCTET_5: &[u8; 5] = b"\xf8\xa1\xa1\xa1\xa1"; //not unicode
+
+        assert!(Request::from(OCTET_2).is_err());
+        assert!(Request::from(OCTET_3).is_err());
+        assert!(Request::from(OCTET_4).is_err());
+        assert!(Request::from(OCTET_5).is_err());
     }
 }
