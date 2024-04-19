@@ -60,9 +60,7 @@ impl<Context> RouteTrie<Context> {
         mut path_values: HashMap<&'static str, &'a str>,
     ) -> Option<(RouteHandler<Context>, Identifiers<'a>)> {
         if path.is_empty() {
-            let Some(handler) = self.handler else {
-                return None;
-            };
+            let handler = self.handler?;
             return Some((handler, Identifiers { path_values }));
         }
 

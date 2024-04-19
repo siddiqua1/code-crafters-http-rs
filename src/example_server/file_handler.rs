@@ -3,9 +3,8 @@
 use std::fs::File;
 use std::io::{Read, Write};
 use std::path::PathBuf;
+use anyhow::{Result, anyhow};
 
-#[derive(Debug)]
-pub struct BaseDirectoryNotFound;
 
 #[derive(Debug)]
 pub struct FileHandler {
@@ -13,9 +12,9 @@ pub struct FileHandler {
 }
 
 impl FileHandler {
-    pub fn new(path: PathBuf) -> Result<FileHandler, BaseDirectoryNotFound> {
+    pub fn new(path: PathBuf) -> Result<FileHandler> {
         if !path.is_absolute() {
-            return Err(BaseDirectoryNotFound);
+            return Err(anyhow!("path is not absolute"));
         }
         return Ok(FileHandler { base_dir: path });
     }
@@ -49,14 +48,14 @@ impl FileHandler {
         return file_buffer;
     }
 
-    pub fn write(&self, file: PathBuf, data: &[u8]) -> Result<usize, BaseDirectoryNotFound> {
+    pub fn write(&self, file: PathBuf, data: &[u8]) -> Result<usize> {
         let mut file = match File::create(file) {
-            Err(_) => return Err(BaseDirectoryNotFound),
+            Err(_) => return Err(anyhow!("Unable to create file")),
             Ok(f) => f,
         };
         match file.write_all(data) {
             Ok(()) => return Ok(data.len()),
-            Err(_e) => return Err(BaseDirectoryNotFound),
+            Err(_e) => return Err(anyhow!("Unable to write to file")),
         }
     }
 

@@ -8,14 +8,17 @@ use core::route_table::RouteTable;
 use core::router::Router;
 
 use example_server::context::get_context;
-use example_server::routes::index;
+use example_server::routes;
 
 fn main() {
     let addr = "127.0.0.1:4221";
     let context = get_context();
     // panic-ing here is fine since an invalid router should not be recoverable
     let mut app = Router::<_, RouteTable<_>>::new(addr, context).unwrap();
-    app.handle("/", index).unwrap();
+    app.handle("/", routes::index).unwrap();
+    app.handle("/echo/{msg}", routes::echo).unwrap();
+    app.handle("/user-agent", routes::user_agent).unwrap();
+    app.handle("/files/{file}", routes::files).unwrap();
 
     app.run();
 }
