@@ -4,7 +4,9 @@
 mod core;
 mod example_server;
 
-use core::route_table::RouteTable;
+//use core::route_table::RouteTable; // alternative implementation
+use core::route_trie::RouteTrie;
+
 use core::router::Router;
 
 use example_server::context::get_context;
@@ -14,7 +16,7 @@ fn main() {
     let addr = "127.0.0.1:4221";
     let context = get_context();
     // panic-ing here is fine since an invalid router should not be recoverable
-    let mut app = Router::<_, RouteTable<_>>::new(addr, context).unwrap();
+    let mut app = Router::<_, RouteTrie<_>>::new(addr, context).unwrap();
     app.handle("/", routes::index).unwrap();
     app.handle("/echo/{msg}", routes::echo).unwrap();
     app.handle("/user-agent", routes::user_agent).unwrap();
