@@ -7,7 +7,7 @@ use std::path::PathBuf;
 #[derive(Debug)]
 pub struct BaseDirectoryNotFound;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct FileHandler {
     base_dir: PathBuf,
 }

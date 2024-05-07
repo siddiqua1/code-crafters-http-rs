@@ -1,2 +1,10 @@
 mod index;
 pub use index::index;
+mod files;
+pub use files::files;
+mod echo;
+pub use echo::echo;
+mod user_agent;
+pub use user_agent::user_agent;
+mod async_test;
+pub use async_test::async_test_get;

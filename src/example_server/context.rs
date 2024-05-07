@@ -2,7 +2,7 @@ use crate::example_server::file_handler::FileHandler;
 use std::env;
 use std::path::PathBuf;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ServerContext {
     pub file_handler: FileHandler,
 }

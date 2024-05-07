@@ -4,21 +4,40 @@
 mod core;
 mod example_server;
 
-// use core::route_table::RouteTable;
-// use core::router::Router;
+use core::route_table::RouteTable;
+use core::router::run;
+use core::router::Router;
+use core::routing::SyncRouteHandler;
+use futures::executor::block_on;
 
-// use example_server::context::get_context;
-// use example_server::routes::index;
+use example_server::context::get_context;
+use example_server::routes::*;
 
-// fn main() {
-//     let addr = "127.0.0.1:4221";
-//     let context = get_context();
-//     // panic-ing here is fine since an invalid router should not be recoverable
-//     let mut app = Router::<_, RouteTable<_>>::new(addr, context).unwrap();
-//     // app.handle("/", index).unwrap();
+#[macro_use]
+extern crate lazy_static;
 
-//     app.run();
-// }
+lazy_static! {
+    static ref APP: Router<
+        example_server::context::ServerContext,
+        RouteTable<example_server::context::ServerContext>,
+    > = {
+        let addr = "127.0.0.1:4221";
+        let context = get_context();
+
+        let mut a = block_on(Router::<_, RouteTable<_>>::new(addr, context)).unwrap();
+        a.handle_sync("/", index).unwrap();
+        a.handle_sync("/files/{file}", files).unwrap();
+        a.handle_sync("/echo/{msg}", echo).unwrap();
+        a.handle_sync("/user-agent", user_agent).unwrap();
+        // a.handle_async("/async", async_test_get).unwrap();
+        a
+    };
+}
+
+#[async_std::main]
+async fn main() {
+    run(&APP).await;
+}
 
 // #[allow(dead_code)]
 // const RESPONSE_OK: &[u8; 19] = b"HTTP/1.1 200 OK\r\n\r\n";
