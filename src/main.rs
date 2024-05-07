@@ -4,21 +4,21 @@
 mod core;
 mod example_server;
 
-use core::route_table::RouteTable;
-use core::router::Router;
+// use core::route_table::RouteTable;
+// use core::router::Router;
 
-use example_server::context::get_context;
-use example_server::routes::index;
+// use example_server::context::get_context;
+// use example_server::routes::index;
 
-fn main() {
-    let addr = "127.0.0.1:4221";
-    let context = get_context();
-    // panic-ing here is fine since an invalid router should not be recoverable
-    let mut app = Router::<_, RouteTable<_>>::new(addr, context).unwrap();
-    app.handle("/", index).unwrap();
+// fn main() {
+//     let addr = "127.0.0.1:4221";
+//     let context = get_context();
+//     // panic-ing here is fine since an invalid router should not be recoverable
+//     let mut app = Router::<_, RouteTable<_>>::new(addr, context).unwrap();
+//     // app.handle("/", index).unwrap();
 
-    app.run();
-}
+//     app.run();
+// }
 
 // #[allow(dead_code)]
 // const RESPONSE_OK: &[u8; 19] = b"HTTP/1.1 200 OK\r\n\r\n";
