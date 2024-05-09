@@ -9,66 +9,51 @@ use std::collections::HashMap;
 use std::collections::HashSet;
 use std::hash::Hash;
 use std::hash::Hasher;
+use std::sync::Arc;
 
-pub type BoxFuture<T> = Pin<Box<dyn Future<Output = T> + Send>>;
 pub struct Identifiers<'a> {
     pub path_values: HashMap<&'static str, &'a str>,
 }
 
-pub type SyncRouteHandler<Context> =
-    fn(req: &Request, path_vals: &Identifiers, ctx: &'static Context) -> Result<Vec<u8>>;
+pub type SyncRouteHandler<'a, Context> = fn(
+    req: &'a Request<'a>,
+    path_vals: &'a Identifiers<'a>,
+    ctx: &'static Context,
+) -> Result<Vec<u8>>;
 
-pub type AsyncRouteHandler<Context> =
-    fn(req: &Request, path_vals: &Identifiers, ctx: &'static Context) -> BoxFuture<Result<Vec<u8>>>;
+pub type BoxedAsync<'a, Context> = Arc<
+    dyn Fn(
+        &'a Request<'a>,
+        &'a Identifiers<'a>,
+        &'static Context,
+    ) -> Pin<Box<dyn Future<Output = Result<Vec<u8>>>>>,
+>;
 
-// TODO: once the following issue is stablized, switch to using impl trait in type alias
-// https://github.com/rust-lang/rust/issues/63063
-// pub type OtherAsycn<Context> = fn(
-//     req: &Request,
-//     path_vals: &Identifiers,
-//     ctx: &Context,
-// ) -> impl Future<Output = Result<Vec<u8>>>;
-
-#[derive(Debug, Clone)]
-pub enum RouteHandler<Context: Clone + 'static> {
-    Sync(SyncRouteHandler<Context>),
-    Async(AsyncRouteHandler<Context>),
+// impl<'a, Context: Clone + Copy + 'static> Clone for BoxedAsync<'a, Context> {}
+#[derive(Clone)]
+pub struct AsyncRouteHandler<'a, Context: Clone + Copy + 'static> {
+    pub handler: BoxedAsync<'a, Context>,
 }
 
-// fn foo<Context>(u: impl Fn(&Request, &Identifiers, &Context) -> BoxFuture<Result<Vec<u8>>>) {}
-
-impl<Context: Clone> From<SyncRouteHandler<Context>> for RouteHandler<Context> {
-    fn from(f: SyncRouteHandler<Context>) -> Self {
-        return Self::Sync(f);
-    }
-}
-impl<Context: Clone> From<AsyncRouteHandler<Context>> for RouteHandler<Context> {
-    fn from(f: AsyncRouteHandler<Context>) -> Self {
-        return Self::Async(f);
-    }
+#[derive(Clone)]
+pub enum RouteHandler<'a, Context: Clone + Copy + 'static> {
+    Sync(SyncRouteHandler<'a, Context>),
+    Async(AsyncRouteHandler<'a, Context>),
 }
 
-#[macro_export]
-macro_rules! form_handler {
-    ($l:tt, SyncRouteHandler) => {{
-        use $crate::core::routing::RouteHandler;
-        let handle: SyncRouteHandler<_> = $l;
-        let handle: RouteHandler<_> = handle.into();
-        handle
-    }};
-    ($l:tt, AsyncRouteHandler) => {{
-        // use $crate::core::request::Request;
-        use $crate::core::routing::AsyncRouteHandler;
-        use $crate::core::routing::RouteHandler;
-
-        let handle: AsyncRouteHandler<_> = $l;
-        // let handle: AsyncRouteHandler<_> = move |r, p, c| Box::pin($l(r, p, c));
-        let handle: RouteHandler<_> = handle.into();
-        handle
-    }};
+pub fn force_boxed<'a, Context: Clone + Copy + 'static, F, T>(
+    f: F,
+) -> AsyncRouteHandler<'a, Context>
+where
+    F: 'static + Fn(&'a Request<'a>, &'a Identifiers<'a>, &'static Context) -> T,
+    T: Future<Output = Result<Vec<u8>>> + 'static,
+{
+    return AsyncRouteHandler {
+        handler: Arc::new(move |r, p, c| {
+            return Box::pin(f(r, p, c));
+        }),
+    };
 }
-#[allow(unused_imports)]
-pub(crate) use form_handler;
 
 #[derive(Debug)]
 pub enum Segments {
@@ -133,30 +118,42 @@ impl Segments {
     }
 }
 
-pub trait Routeable<Context: Sized + Clone> {
+pub trait Routeable<'a, Context: Clone + Copy + 'static + Sized> {
     fn new() -> Self;
-    fn add_route(&mut self, path: &'static str, handler: RouteHandler<Context>) -> Result<()>;
-    fn add_route_async(
+    fn add_route_async<'b, F, T>(&mut self, path: &'static str, handler: F) -> Result<()>
+    where
+        F: 'static + Fn(&'b Request<'b>, &'b Identifiers<'b>, &'static Context) -> T + Clone,
+        T: Future<Output = Result<Vec<u8>>> + 'static,
+        'a: 'b,
+        'b: 'a;
+
+    fn add_route_async2(
         &mut self,
         path: &'static str,
-        handler: AsyncRouteHandler<Context>,
+        handler: AsyncRouteHandler<'a, Context>,
     ) -> Result<()>;
     fn add_route_sync(
         &mut self,
         path: &'static str,
-        handler: SyncRouteHandler<Context>,
+        handler: SyncRouteHandler<'_, Context>,
     ) -> Result<()>;
+    // 'b: 'a;
 
-    fn match_route<'a>(&self, path: &'a str) -> Option<(RouteHandler<Context>, Identifiers<'a>)>;
+    fn match_route<'b>(
+        &self,
+        path: &'b str,
+    ) -> Option<(RouteHandler<'b, Context>, Identifiers<'b>)>
+    where
+        // 'a: 'b,
+        'b: 'a;
 }
 
-#[derive(Debug)]
-pub struct Route<Context: Clone + 'static> {
+pub struct Route<'a, Context: Clone + Copy + 'static> {
     pub path_segments: Vec<Segments>,
-    pub handler: RouteHandler<Context>, // handler should not matter when comparing routes
+    pub handler: RouteHandler<'a, Context>, // handler should not matter when comparing routes
 }
 
-impl<Context: Clone> Hash for Route<Context> {
+impl<'a, Context: Clone + Copy + 'static> Hash for Route<'a, Context> {
     fn hash<H: Hasher>(&self, hasher: &mut H) {
         self.path_segments.hash(hasher);
     }
@@ -201,7 +198,7 @@ fn make_segments(path: &'static str) -> Result<Vec<Segments>> {
     return Ok(path_segments);
 }
 
-impl<Context: Clone> Route<Context> {
+impl<'a, Context: Clone + Copy + 'static> Route<'a, Context> {
     pub fn matches<'b>(&self, path: &'b str) -> Option<Identifiers<'b>> {
         let mut path_values = HashMap::new();
 
@@ -226,37 +223,76 @@ impl<Context: Clone> Route<Context> {
     }
 }
 
-impl<Context: Clone> Route<Context> {
+impl<'a, Context: Clone + Copy + 'static> Route<'a, Context> {
     pub fn new(
         path: &'static str,
-        handler: impl Into<RouteHandler<Context>>,
-    ) -> Result<Route<Context>> {
+        handler: impl Into<RouteHandler<'a, Context>>,
+    ) -> Result<Route<'a, Context>> {
         let path_segments = make_segments(path)?;
         return Ok(Route {
             path_segments,
             handler: handler.into(),
         });
     }
+
+    pub fn new_sync(
+        path: &'static str,
+        handler: SyncRouteHandler<'a, Context>,
+    ) -> Result<Route<'a, Context>> {
+        let path_segments = make_segments(path)?;
+        return Ok(Route {
+            path_segments,
+            handler: RouteHandler::Sync(handler),
+        });
+    }
+
+    pub fn new_async<F, T>(path: &'static str, func: F) -> Result<Route<'a, Context>>
+    where
+        F: 'static + Fn(&'a Request<'a>, &'a Identifiers<'a>, &'static Context) -> T,
+        T: Future<Output = Result<Vec<u8>>> + 'static,
+    {
+        let path_segments = make_segments(path)?;
+        return Ok(Route {
+            path_segments,
+            handler: RouteHandler::Async(force_boxed(func)),
+        });
+    }
+
+    pub fn new_async2(
+        path: &'static str,
+        func: AsyncRouteHandler<'a, Context>,
+    ) -> Result<Route<'a, Context>> {
+        let path_segments = make_segments(path)?;
+        return Ok(Route {
+            path_segments,
+            handler: RouteHandler::Async(func),
+        });
+    }
 }
 
-impl<Context: Clone> PartialEq for Route<Context> {
+impl<'a, Context: Clone + Copy + 'static> PartialEq for Route<'a, Context> {
     fn eq(&self, other: &Self) -> bool {
         return self.path_segments.eq(&other.path_segments);
     }
 }
 
-impl<Context: Clone> Eq for Route<Context> {}
+impl<'a, Context: Clone + Copy + 'static> Eq for Route<'a, Context> {}
 
-impl<Context: Clone> Ord for Route<Context> {
+impl<Context: Clone + Copy + 'static> Ord for Route<'_, Context> {
     fn cmp(&self, other: &Self) -> Ordering {
         return self.path_segments.cmp(&other.path_segments);
     }
 }
 
-#[allow(clippy::non_canonical_partial_ord_impl)]
-impl<Context: Clone> PartialOrd for Route<Context> {
+impl<Context: Clone + Copy + 'static> PartialOrd for Route<'_, Context> {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         return Some(self.cmp(other));
+    }
+}
+
+impl<Context: Clone + Copy + 'static> std::fmt::Debug for Route<'_, Context> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        return write!(f, "Route: [{:?}]", self.path_segments);
     }
 }
 
@@ -329,13 +365,13 @@ mod tests {
         });
     }
 
-    // async fn thunk2_async(
-    //     _req: &Request<'_>,
-    //     _path_vals: &Identifiers<'_>,
-    //     _ctx: &PlaceholderContext,
-    // ) -> Result<Vec<u8>> {
-    //     return Ok(Vec::new());
-    // }
+    async fn thunk2_async(
+        _req: &Request<'_>,
+        _path_vals: &Identifiers<'_>,
+        _ctx: &PlaceholderContext,
+    ) -> Result<Vec<u8>> {
+        return Ok(Vec::new());
+    }
 
     // fn force_boxed<T>(f: fn(u32) -> T) -> Incrementer
     // where
@@ -359,16 +395,16 @@ mod tests {
         let orig = "/some/path/potato";
         let handle: SyncRouteHandler<PlaceholderContext> = thunk;
 
-        let route = Route::new(orig, handle);
+        let route = Route::new_sync(orig, handle);
         assert!(route.is_ok());
         let route = route.unwrap();
 
-        let route2 = Route::new(orig, form_handler!(thunk2, SyncRouteHandler));
+        let route2 = Route::new_sync(orig, thunk2);
         assert!(route2.is_ok());
         let route2 = route2.unwrap();
 
         // let handle: AsyncRouteHandler<_> = thunk_async;
-        let route3 = Route::new(orig, form_handler!(thunk_async, AsyncRouteHandler));
+        let route3 = Route::new_async(orig, thunk_async);
         assert!(route3.is_ok());
         let route3 = route3.unwrap();
 
@@ -384,18 +420,19 @@ mod tests {
 
         // TODO: need to make work with regular async functions
 
-        // let route4 = Route::new(orig, handler!(thunk2_async, AsyncRouteHandler));
-        // assert!(route4.is_ok());
-        // let route4 = route4.unwrap();
+        let route4 = Route::new_async(orig, thunk2_async);
+        assert!(route4.is_ok());
+        let route4 = route4.unwrap();
 
         assert_eq!(route, route2);
         assert_eq!(route, route3);
+        assert_eq!(route, route4);
     }
 
     #[test]
     fn route_matches() {
         let orig = "/some/path/potato";
-        let route = Route::new(orig, form_handler!(thunk, SyncRouteHandler));
+        let route = Route::new_sync(orig, thunk);
         assert!(route.is_ok());
         let route = route.unwrap();
         assert!(route.matches(orig).is_some());
@@ -404,7 +441,7 @@ mod tests {
     #[test]
     fn route_matches_captures() {
         let orig = "/some/{id}/potato";
-        let route = Route::new(orig, form_handler!(thunk, SyncRouteHandler));
+        let route = Route::new_sync(orig, thunk);
         assert!(route.is_ok());
         let route = route.unwrap();
         for id in 0..10 {
@@ -420,7 +457,7 @@ mod tests {
     #[test]
     fn route_matches_captures_multiple() {
         let orig = "/some/{id}/potato/{msg}";
-        let route = Route::new(orig, form_handler!(thunk, SyncRouteHandler));
+        let route = Route::new_sync(orig, thunk);
         assert!(route.is_ok());
         let route = route.unwrap();
         let id = 1234;
@@ -439,7 +476,7 @@ mod tests {
     #[test]
     fn route_matches_fails() {
         let orig = "/some/{id}/potato";
-        let route = Route::new(orig, form_handler!(thunk, SyncRouteHandler));
+        let route = Route::new_sync(orig, thunk);
         assert!(route.is_ok());
         let route = route.unwrap();
         let id = 1234;
@@ -451,14 +488,14 @@ mod tests {
     #[test]
     fn route_keys_unique() {
         let orig = "/some/{id}/potato/{id}";
-        let route = Route::new(orig, form_handler!(thunk, SyncRouteHandler));
+        let route = Route::new_sync(orig, thunk);
         assert!(route.is_err());
     }
 
     #[test]
     fn route_matches_same_var_twice() {
         let orig = "/some/{id}/potato/{id}";
-        let route = Route::new(orig, form_handler!(thunk, SyncRouteHandler));
+        let route = Route::new_sync(orig, thunk);
         assert!(route.is_err());
     }
 }
