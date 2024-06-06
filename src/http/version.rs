@@ -1,5 +1,6 @@
 use crate::prelude::*;
 
+#[derive(Debug, PartialEq)]
 pub enum Version {
     Http1_1,
 }

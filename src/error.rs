@@ -18,4 +18,6 @@ pub enum Error {
     HttpUnsupportedMethod,
     HttpPathParsing,
     HttpBadHeaders,
+    HttpHeaderNoKey,
+    HttpHeaderNoValue,
 }

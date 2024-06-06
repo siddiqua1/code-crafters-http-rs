@@ -6,6 +6,7 @@ use std::collections::HashMap;
 
 // Request only lives as long as the TCP buffer so we tie the lifetime of the Request to that buffer
 // Request is passive, should be ok to make the fields public
+#[derive(Debug, PartialEq)]
 pub struct Request<'a> {
     pub method: Method,
     pub path: Path<'a>,
@@ -20,11 +21,25 @@ impl<'a> TryFrom<&'a [u8]> for Request<'a> {
         let Ok(request) = std::str::from_utf8(read_buffer) else {
             return Err(Error::HttpUnableToParse);
         };
+        /*
+        From the RFC the message format is the following
+        start-line CRLF
+        *( field-line CRLF )
+        CRLF
+        [ message-body ]
+
+        which translates to
+        STATUS \r\n
+        *(HEADER: KEY \r\n)
+        \r\n
+        BODY?
+        */
 
         let lines = request.split("\r\n").collect::<Vec<&str>>();
 
-        const MINIMUM_EXPECTED_LINES: usize = 2;
-        if lines.len() < MINIMUM_EXPECTED_LINES {
+        const MINIMUM_CRLF: usize = 2;
+        const MINIMUM_LINES: usize = MINIMUM_CRLF + 1;
+        if lines.len() < MINIMUM_LINES {
             return Err(Error::HttpMalformedRequest);
         }
 
@@ -36,45 +51,37 @@ impl<'a> TryFrom<&'a [u8]> for Request<'a> {
         let path = Path::try_from(status_line[1])?;
         let version = Version::try_from(status_line[2])?;
 
-        // from the spec, an empty line seperates the headers and status line from the body
-        let mut empty_line = None;
-        const STARTING_BODY_SEARCH_IDX: usize = 1;
-        for (i, line) in lines[STARTING_BODY_SEARCH_IDX..].iter().enumerate() {
-            if line.is_empty() {
-                empty_line = Some(i + 1); // since we remove the status line
-                break;
-            }
+        // there must a sequence \r\n\r\n from the specification
+        // that is the second to last line
+        let empty_line = lines.len() - 2;
+        if !lines[empty_line].is_empty() {
+            return Err(Error::HttpMalformedRequest);
         }
 
-        let mut body = None;
-
-        let Some(empty_line) = empty_line else {
+        if lines.len() == MINIMUM_LINES {
             return Ok(Request {
                 method,
                 path,
                 version,
                 headers: Headers::default(),
-                body,
+                // even if a body was supplied, because no header are present we don't parse them
+                body: None,
             });
-        };
+        }
+
+        let mut body = None;
 
         let request_headers = &lines[1..empty_line];
         let headers = Headers::try_from(request_headers)?;
 
         //not supporting case-insensitive strings at the moment as that would require ownership
         if let Some(n) = headers.get("Content-Length") {
-            let n = n.parse::<usize>();
-            let Ok(n) = n else {
+            let Ok(n) = n.parse::<usize>() else {
                 return Err(Error::Generic(
                     "Unable to parse Content-Length header".to_string(),
                 ));
             };
-            let body_idx = empty_line + 1;
-            if lines.len() <= body_idx {
-                return Err(Error::Generic(
-                    "Content-Length specified, but no body was provided.".to_string(),
-                ));
-            }
+            let body_idx = empty_line + 1; //always in bound
             if n > lines[body_idx].len() {
                 return Err(Error::Generic(
                     "Content-Length specified is larger than body".to_string(),

@@ -1,42 +1,42 @@
 #![deny(clippy::implicit_return)]
 #![allow(clippy::needless_return)]
 
-mod core;
-mod example_server;
+// mod core;
+// mod example_server;
 
-use core::route_table::RouteTable;
-use core::router::run;
-use core::router::Router;
-use core::routing::SyncRouteHandler;
-use futures::executor::block_on;
+// use core::route_table::RouteTable;
+// use core::router::run;
+// use core::router::Router;
+// use core::routing::SyncRouteHandler;
+// use futures::executor::block_on;
 
-use example_server::context::get_context;
-use example_server::routes::*;
+// use example_server::context::get_context;
+// use example_server::routes::*;
 
-#[macro_use]
-extern crate lazy_static;
+// #[macro_use]
+// extern crate lazy_static;
 
-lazy_static! {
-    static ref APP: Router<
-        example_server::context::ServerContext,
-        RouteTable<example_server::context::ServerContext>,
-    > = {
-        let addr = "127.0.0.1:4221";
-        let context = get_context();
+// lazy_static! {
+//     static ref APP: Router<
+//         example_server::context::ServerContext,
+//         RouteTable<example_server::context::ServerContext>,
+//     > = {
+//         let addr = "127.0.0.1:4221";
+//         let context = get_context();
 
-        let mut a = block_on(Router::<_, RouteTable<_>>::new(addr, context)).unwrap();
-        a.handle_sync("/", index).unwrap();
-        a.handle_sync("/files/{file}", files).unwrap();
-        a.handle_sync("/echo/{msg}", echo).unwrap();
-        a.handle_sync("/user-agent", user_agent).unwrap();
-        // a.handle_async("/async", async_test_get).unwrap();
-        a
-    };
-}
+//         let mut a = block_on(Router::<_, RouteTable<_>>::new(addr, context)).unwrap();
+//         a.handle_sync("/", index).unwrap();
+//         a.handle_sync("/files/{file}", files).unwrap();
+//         a.handle_sync("/echo/{msg}", echo).unwrap();
+//         a.handle_sync("/user-agent", user_agent).unwrap();
+//         // a.handle_async("/async", async_test_get).unwrap();
+//         a
+//     };
+// }
 
 #[async_std::main]
 async fn main() {
-    run(&APP).await;
+    // run(&APP).await;
 }
 
 // #[allow(dead_code)]

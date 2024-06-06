@@ -2,9 +2,9 @@
 #![allow(clippy::needless_return)]
 #![allow(unused)] // temporary
 
-mod core;
-pub use core::*;
+// mod core;
+// pub use core::*;
 
 mod error;
-mod http;
+pub mod http;
 mod prelude;

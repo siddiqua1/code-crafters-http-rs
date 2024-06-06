@@ -1,3 +1,5 @@
+#![allow(unused)] // temporary
+
 use anyhow::Result;
 use core::future::Future;
 use core::pin::Pin;
@@ -122,8 +124,8 @@ fn add_route_sync(path: &'static str, handler: SyncRouteHandler<PlaceholderConte
 }
 
 fn test_add() {
-    add_route_async("path", thunk_async);
-    add_route_sync("path", thunk);
+    let _ = add_route_async("path", thunk_async);
+    let _ = add_route_sync("path", thunk);
 }
 
 async fn inc(src: &u32) -> u32 {

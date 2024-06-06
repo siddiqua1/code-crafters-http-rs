@@ -1,9 +1,9 @@
 use crate::prelude::*;
 
 use itertools::Itertools;
-use std::collections::HashMap;
+use std::{collections::HashMap, ops::Index};
 
-#[derive(Default)]
+#[derive(Default, Debug, PartialEq)]
 pub struct Headers<'a> {
     kv: HashMap<&'a str, &'a str>,
 }
@@ -13,6 +13,10 @@ impl<'a> Headers<'a> {
     pub fn get(&self, key: &str) -> Option<&&'a str> {
         return self.kv.get(key);
     }
+
+    pub fn is_empty(&self) -> bool {
+        return self.kv.is_empty();
+    }
 }
 
 impl<'a> TryFrom<&[&'a str]> for Headers<'a> {
@@ -20,11 +24,32 @@ impl<'a> TryFrom<&[&'a str]> for Headers<'a> {
     fn try_from(value: &[&'a str]) -> Result<Self> {
         let mut kv = HashMap::new();
         for header in value {
-            let key_val = header.split(": ").collect_vec();
-            if key_val.len() != 2 {
+            /* From the spec we have that
+            Each field line consists of a case-insensitive field name followed by a colon (":"),
+            optional leading whitespace, the field line value, and optional trailing whitespace.
+             */
+            let Some(split_idx) = header.find(':') else {
                 return Err(Error::HttpBadHeaders);
+            };
+            if split_idx == 0 {
+                return Err(Error::HttpHeaderNoKey);
             }
-            kv.insert(key_val[0], key_val[1]);
+            let key = &header[0..split_idx];
+            if split_idx == header.len() - 1 {
+                return Err(Error::HttpHeaderNoValue);
+            }
+            let value = &header[split_idx + 1..];
+            let start = if value.starts_with(' ') { 1 } else { 0 };
+            let end = if value.ends_with(' ') {
+                value.len() - 1
+            } else {
+                value.len()
+            };
+            if start > end {
+                return Err(Error::HttpHeaderNoValue);
+            }
+            let value = &value[start..end];
+            kv.insert(key, value);
         }
 
         return Ok(Self { kv });
