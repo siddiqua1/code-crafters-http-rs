@@ -125,6 +125,17 @@ mod tests {
         assert!(parsed.is_err());
     }
     #[test]
+    fn request_err_header_key_has_whitespace() {
+        let path = "/user-agent";
+        let request = format!(
+            "GET {} HTTP/1.1\r\nHost :localhost:4221\r\nUser-Agent: curl/7.64.1 \r\n\r\n",
+            path
+        );
+        let parsed = Request::try_from(request.as_bytes());
+        assert!(parsed.is_err());
+    }
+
+    #[test]
     fn request_err_header_no_value() {
         let path = "/user-agent";
         let request = format!(

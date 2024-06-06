@@ -35,6 +35,9 @@ impl<'a> TryFrom<&[&'a str]> for Headers<'a> {
                 return Err(Error::HttpHeaderNoKey);
             }
             let key = &header[0..split_idx];
+            if key.ends_with(' ') {
+                return Err(Error::HttpBadHeaders);
+            }
             if split_idx == header.len() - 1 {
                 return Err(Error::HttpHeaderNoValue);
             }
@@ -49,6 +52,7 @@ impl<'a> TryFrom<&[&'a str]> for Headers<'a> {
                 return Err(Error::HttpHeaderNoValue);
             }
             let value = &value[start..end];
+            // TODO: RFC2616 states that if multiple keys we need to create a comma seperated array?
             kv.insert(key, value);
         }
 
