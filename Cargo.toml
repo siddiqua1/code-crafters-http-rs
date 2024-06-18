@@ -36,3 +36,15 @@ anyhow = "1.0.59"                                   # error handling
 [dependencies.async-std]
 version = "1.12.0"
 features = ["attributes"]
+
+[[bin]]
+name = "function_pointer_demo"
+path = "src/async_function_pointers_demo.rs"
+
+[[bin]]
+name = "demo_server"
+path = "src/async_function_pointers_demo.rs"
+
+[lib]
+name = "http_routing_rust"
+path = "src/lib.rs"
