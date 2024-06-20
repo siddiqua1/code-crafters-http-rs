@@ -1,6 +1,6 @@
 //! Based on RFC: https://datatracker.ietf.org/doc/html/rfc9112
 
-use crate::{http::headers, prelude::*};
+use crate::prelude::*;
 use itertools::Itertools;
 use std::collections::HashMap;
 

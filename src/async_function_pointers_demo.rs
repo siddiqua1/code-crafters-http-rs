@@ -1,72 +1,102 @@
 //! This application is a proof on concept meant to demo seemless handling between synchronous
 //! and asynchronous code
+//!
+//! From this it seems that the function must consume the underlying request buffer
 #![allow(warnings)]
 
 use core::pin::Pin;
-use std::future::Future;
+use futures::{future::BoxFuture, Future};
 
 type Res = Result<(), Box<dyn std::error::Error>>;
 
-#[derive(Clone)]
-struct SyncPointer<'a> {
-    pub func: fn(msg: &'a str) -> Res,
+async fn foo(msg: String) -> Res {
+    println!("{msg}");
+    Ok(())
 }
 
-/// Type to encapsulate asynchronous function pointers
-
-struct AsyncFnPointer<'a> {
-    pub func: Box<dyn FnOnce(&'a str) -> Pin<Box<dyn Future<Output = Res>>>>,
+async fn bar(msg: String) -> Res {
+    println!("{msg}");
+    Err("Potato".into())
 }
 
-// impl<'a> Clone for AsyncFnPointer<'a> {
-//     fn clone(&self) -> Self {
-//         Self {
-//             func: self.func.clone(),
-//         }
-//     }
-// }
-
-enum FunctionPointer<'a> {
-    Sync(SyncPointer<'a>),
-    Async(AsyncFnPointer<'a>),
+fn wrapper<T, F>(f: F) -> Box<dyn Fn(String) -> BoxFuture<'static, Res>>
+where
+    T: Future<Output = Res> + Send + 'static,
+    F: Fn(String) -> T + 'static,
+{
+    Box::new(move |msg| Box::pin(f(msg)))
 }
 
-fn sync_print(msg: &str) -> Res {
-    println!("Sync: {msg}");
-    return Ok(());
-}
+type Wrapped = Box<dyn Fn(String) -> BoxFuture<'static, Res>>;
 
-async fn async_print(msg: &str) -> Res {
-    println!("Async: {msg}");
-    return Ok(());
-}
+async fn pointer_work_if_no_ref_params() {
+    let mut v: Vec<Wrapped> = Vec::new();
+    v.push(wrapper(foo));
+    v.push(wrapper(bar));
 
-async fn call<'a>(msg: &'a str, f: FunctionPointer<'a>) -> Res {
-    // let msg = "static message";
-    match f {
-        FunctionPointer::Sync(g) => (g.func)(msg),
-        FunctionPointer::Async(h) => (h.func)(msg).await,
+    let args = vec!["argument1", "argument2"];
+
+    for (f, arg) in v.iter().zip(args.iter()) {
+        println!("{:?}", f(arg.to_string()).await);
+    }
+    for (f, arg) in v.iter().zip(args.iter()) {
+        println!("{:?}", f(arg.to_string()).await);
     }
 }
 
-fn convert_fn<'a, 'b, T>(f: fn(&'a str) -> T) -> FunctionPointer<'b>
+struct Caller<'a, 'b>
 where
-    T: Future<Output = Res> + 'static,
+    'a: 'b,
 {
-    FunctionPointer::Async(AsyncFnPointer {
-        func: Box::new(move |n| Box::pin(f(n))),
-    })
+    callback: Box<dyn Fn(&'a str) -> BoxFuture<'static, Res> + 'b>,
+}
+impl<'a, 'b> Caller<'a, 'b>
+where
+    'a: 'b,
+{
+    fn new<T, F>(f: F) -> Self
+    where
+        T: Future<Output = Res> + Send + 'static,
+        F: Fn(&'a str) -> T + 'b,
+    {
+        Caller {
+            callback: Box::new(move |msg| Box::pin(f(msg))),
+        }
+    }
+
+    async fn invoke(&self, x: &'a str) -> Res {
+        return (self.callback)(x).await;
+    }
+}
+
+async fn foo_ref(msg: &str) -> Res {
+    println!("Foo: {msg}");
+    Ok(())
+}
+
+async fn bar_ref(msg: &str) -> Res {
+    println!("Bar: {msg}");
+    Err("Potato".into())
+}
+
+async fn async_with_ref_params() {
+    let mut v: Vec<Caller> = Vec::new();
+    v.push(Caller::new(foo_ref));
+    v.push(Caller::new(bar_ref));
+
+    let args = vec!["argument1", "argument2", "argument3"];
+
+    for msg in args {
+        for f in &v {
+            let _ = f.invoke(msg).await;
+        }
+    }
 }
 
 #[async_std::main]
 async fn main() {
-    let sync = FunctionPointer::Sync(SyncPointer { func: sync_print });
-    let a_sync = convert_fn(async_print);
-    let msg = String::from("Hello World");
-    // let msg = "static message";
-
-    call(&msg, sync).await;
-    call(&msg, a_sync).await;
+    pointer_work_if_no_ref_params().await;
+    async_with_ref_params().await;
 
     println!("Main Finished");
 }

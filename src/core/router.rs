@@ -61,7 +61,7 @@
 //         let mut read_buffer: [u8; MAX_HTTP_REQUEST_SIZE] = [0; MAX_HTTP_REQUEST_SIZE];
 //         if let Err(_e) = stream.read(&mut read_buffer).await {
 //             println!("Error reading from the connection: {}", _e);
-//             return;
+//             return;0
 //         }
 //         // let response = parse_request(&read_buffer, context);
 //         let request = Request::from(&read_buffer);
