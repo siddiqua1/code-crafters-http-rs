@@ -3,7 +3,7 @@
 
 use derive_more::From;
 
-#[derive(Debug, From)]
+#[derive(Debug, From, Clone)]
 pub enum Error {
     #[from]
     Generic(String),

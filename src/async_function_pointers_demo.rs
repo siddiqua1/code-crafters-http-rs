@@ -111,92 +111,115 @@ async fn async_with_ref_params() {
 // need to be able to clone the function pointer
 
 use http_routing_rust::http::Request;
-// #[derive(Clone)]
-struct SimpleCallBack<'req, 'resp>
+
+struct SimpleCallBack<'borrow, 'req, 'resp>
 where
+    'borrow: 'resp, // borrowed data must live atleast as long the time it takes to drive the Future to completion
     'req: 'resp,
+    'req: 'borrow,
 {
-    callback: Box<dyn Fn(Request<'req>) -> BoxFuture<'resp, Res> + 'resp>,
+    callback: Box<dyn Fn(&'borrow Request<'req>) -> BoxFuture<'resp, Res> + 'resp>,
 }
 
-// impl<'req, 'resp> Clone for SimpleCallBack<'req, 'resp>
-// where
-//     'req: 'resp,
-// {
-//     fn clone(&self) -> Self {
-//         return Self {
-//             callback: self.callback.clone(),
-//         };
-//     }
-// }
-
-impl<'req, 'resp> SimpleCallBack<'req, 'resp>
+impl<'borrow, 'req, 'resp> SimpleCallBack<'borrow, 'req, 'resp>
 where
-    'req: 'resp,
+    'borrow: 'resp,
 {
     fn new<T, F>(f: F) -> Self
     where
         T: Future<Output = Res> + Send + 'resp,
-        F: Fn(Request<'req>) -> T + 'resp,
+        F: Fn(&'borrow Request<'req>) -> T + 'resp,
     {
         SimpleCallBack {
             callback: Box::new(move |msg| Box::pin(f(msg))),
         }
     }
 
-    async fn invoke(&self, x: Request<'req>) -> Res {
+    async fn invoke(&self, x: &'borrow Request<'req>) -> Res {
         return (self.callback)(x).await;
     }
 }
 
-async fn foo_request(msg: Request<'_>) -> Res {
+async fn foo_request(msg: &Request<'_>) -> Res {
     println!("Foo: {msg:?}");
     Ok(())
 }
 
-async fn bar_request(msg: Request<'_>) -> Res {
+async fn bar_request(msg: &Request<'_>) -> Res {
     println!("Bar: {msg:?}");
     Err("Potato".into())
 }
 
 const REQUEST_01: &[u8; 21] = b"GET /one HTTP/1.1\r\n\r\n";
 const REQUEST_02: &[u8; 21] = b"GET /two HTTP/1.1\r\n\r\n";
-fn move_it<T>(_: T) {}
+const REQUEST_03: &[u8; 23] = b"GET /three HTTP/1.1\r\n\r\n";
 
-async fn async_with_structs_with_lifetimes() {
+async fn async_with_ref_params_and_structs_with_lifetimes() {
     // must define first so that these get dropped after the callbacks
-    let r1 = Request::try_from(&REQUEST_01[..]).unwrap();
-    let r2 = Request::try_from(&REQUEST_02[..]).unwrap();
+    let args = vec![
+        Request::try_from(&REQUEST_01[..]).unwrap(),
+        Request::try_from(&REQUEST_02[..]).unwrap(),
+        Request::try_from(&REQUEST_03[..]).unwrap(),
+    ];
 
     let mut v: Vec<SimpleCallBack> = Vec::new();
     v.push(SimpleCallBack::new(bar_request));
     v.push(SimpleCallBack::new(foo_request));
 
-    v[0].invoke(r1).await;
-    v[0].invoke(r2).await;
-    // need to consume since async makes taking in a reference a pain
-    let r1 = Request::try_from(&REQUEST_01[..]).unwrap();
-    let r2 = Request::try_from(&REQUEST_02[..]).unwrap();
+    for msg in args.iter() {
+        for f in &v {
+            let _ = f.invoke(msg).await;
+        }
+    }
+}
 
-    v[1].invoke(r1).await;
-    v[1].invoke(r2).await;
+async fn same_test_but_callback_passed_in(cb: &SimpleCallBack<'_, '_, '_>) {
+    let args = vec![
+        Request::try_from(&REQUEST_01[..]).unwrap(),
+        Request::try_from(&REQUEST_02[..]).unwrap(),
+        Request::try_from(&REQUEST_03[..]).unwrap(),
+    ];
+    // cb.invoke(&args[0]).await;
+}
 
-    let print_incr = Box::new(move |x| {
-        println!("{:?}", x);
-        bar_request(x);
-    });
-    // move_it(v[0].clone());
-    move_it(print_incr.clone());
-    // vec![test_closure, test_closure.clone()];
+async fn reversing_order_of_creation_test() {
+    todo!()
+}
+
+use futures_util::FutureExt;
+use http_routing_rust::callback::Response;
+async fn bar_request_consume(msg: Request<'_>) -> Response {
+    println!("Bar: {msg:?}");
+    Err("Potato".into())
+}
+async fn using_future_ext_shared() {
+    let pointer = Box::new(move |msg| bar_request_consume(msg).shared());
+
+    let funcs = vec![pointer.clone(), pointer.clone(), pointer.clone()];
+    let args = vec![
+        Request::try_from(&REQUEST_01[..]).unwrap(),
+        Request::try_from(&REQUEST_02[..]).unwrap(),
+        Request::try_from(&REQUEST_03[..]).unwrap(),
+    ];
+
+    for msg in args {
+        for f in &funcs {
+            let _ = (f.clone())(msg.clone()).await;
+        }
+    }
 }
 
 //-------------------------------------------------------------------------------------------
 
 #[async_std::main]
 async fn main() {
+    println!();
     pointer_work_if_no_ref_params().await;
+    println!();
     async_with_ref_params().await;
-    async_with_structs_with_lifetimes().await;
-
+    println!();
+    async_with_ref_params_and_structs_with_lifetimes().await;
+    println!();
+    using_future_ext_shared().await;
     println!("Main Finished");
 }
