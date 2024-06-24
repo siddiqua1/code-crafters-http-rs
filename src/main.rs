@@ -15,7 +15,7 @@
 
 // #[macro_use]
 // extern crate lazy_static;
-
+// USE std::sync::OnceLock instead
 // lazy_static! {
 //     static ref APP: Router<
 //         example_server::context::ServerContext,

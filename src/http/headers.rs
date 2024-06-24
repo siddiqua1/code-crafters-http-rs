@@ -3,7 +3,7 @@ use crate::prelude::*;
 use itertools::Itertools;
 use std::{collections::HashMap, ops::Index};
 
-#[derive(Default, Debug, PartialEq)]
+#[derive(Default, Debug, PartialEq, Clone)]
 pub struct Headers<'a> {
     kv: HashMap<&'a str, &'a str>,
 }

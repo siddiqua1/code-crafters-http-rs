@@ -5,6 +5,8 @@
 // mod core;
 // pub use core::*;
 
-mod error;
+pub mod callback;
+pub mod error;
 pub mod http;
+pub mod matching;
 mod prelude;

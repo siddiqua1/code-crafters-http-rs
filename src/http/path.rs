@@ -1,6 +1,6 @@
 use crate::prelude::*;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct Path<'a> {
     /// Exposing internal for ease of use when segmenting
     pub path: &'a str,

@@ -6,7 +6,7 @@ use std::collections::HashMap;
 
 // Request only lives as long as the TCP buffer so we tie the lifetime of the Request to that buffer
 // Request is passive, should be ok to make the fields public
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct Request<'a> {
     pub method: Method,
     pub path: Path<'a>,

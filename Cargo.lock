@@ -483,6 +483,7 @@ dependencies = [
  "bytes",
  "derive_more",
  "futures",
+ "futures-util",
  "itertools",
  "lazy_static",
  "nom",

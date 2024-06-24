@@ -1,7 +1,5 @@
 #[cfg(test)]
 mod tests {
-    use std::string::ParseError;
-
     use http_routing_rust::http::*;
 
     #[test]
